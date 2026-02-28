@@ -17,7 +17,7 @@ import { Authorization } from '../common/decorator/auth.decorator';
 import { FilterShiftDto } from './dto/shift.filter.dto';
 import {$Enums, User} from '../../generated/prisma';
 import Role = $Enums.Role;
-import {GetStatsDto} from "./dto/get-stats.dto";
+
 
 @Controller('shift')
 export class WorkShiftController {
