@@ -4,14 +4,14 @@ services:
   # ---------------------------------
   server:
     build:
-      context: ./work-core-server
+      context: ./workCore-server # <--- ВИПРАВЛЕНО НАЗВУ ПАПКИ
       target: production
     container_name: nest_app_prod
     restart: unless-stopped
     ports:
       - "${APPLICATION_PORT:-3022}:3022"
     env_file:
-      - ./work-core-server/.env
+      - .env
     environment:
       - NODE_ENV=production
       # Перевизначаємо хости для роботи всередині мережі Docker
@@ -23,6 +23,9 @@ services:
       - postgres
       - redis
 
+  # ---------------------------------
+  # FRONTEND (Next.js)
+  # ---------------------------------
   client:
     build:
       context: ./work-core-client
@@ -32,24 +35,30 @@ services:
     ports:
       - "1489:3000"
     env_file:
-      - ./work-core-client/.env.local
+      - .env
     volumes:
       - ./work-core-client:/app
       - /app/node_modules
     depends_on:
       - server
 
+  # ---------------------------------
+  # DATABASE (PostgreSQL)
+  # ---------------------------------
   postgres:
     image: postgres:16
     container_name: postgres_db
     restart: unless-stopped
     env_file:
-      - ./work-core-server/.env
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
 
+  # ---------------------------------
+  # CACHE (Redis)
+  # ---------------------------------
   redis:
     image: redis:7
     container_name: redis_cache
