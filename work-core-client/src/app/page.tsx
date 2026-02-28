@@ -11,15 +11,19 @@ export default function Home() {
   const user = userStore((state) => state.user)
   const [isMounted, setIsMounted] = useState(false)
 
+  // Використовуємо useEffect, щоб переконатися, що код виконується на клієнті
+  // Це запобігає помилкам гідратації при роботі з localStorage
   useEffect(() => {
     setIsMounted(true)
   }, [])
 
   return (
       <div className='min-h-screen bg-white flex flex-col'>
+        {/* --- HEADER --- */}
         <header className='w-full border-b border-gray-100 bg-white/80 backdrop-blur-md fixed top-0 z-50'>
           <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
             <div className='flex justify-between items-center h-16'>
+              {/* Logo */}
               <div className='flex items-center gap-2'>
                 <Image
                     src='/logo.svg'
@@ -28,9 +32,10 @@ export default function Home() {
                     height={32}
                     className='w-8 h-8'
                 />
-                <span className='font-bold text-xl text-gray-900'>WorkCore System</span>
+                <span className='font-bold text-xl text-gray-900'>2Work</span>
               </div>
 
+              {/* Auth Buttons або Dashboard */}
               <div className='flex items-center gap-4'>
                 {isMounted && user ? (
                     <Link
@@ -154,7 +159,7 @@ export default function Home() {
                   Готові оптимізувати свій бізнес?
                 </h2>
                 <p className='text-primary-100 text-lg mb-8 max-w-2xl mx-auto'>
-                  Приєднуйтесь до WorkCore System сьогодні та отримайте повний контроль над робочим процесом.
+                  Приєднуйтесь до 2Work сьогодні та отримайте повний контроль над робочим процесом.
                 </p>
 
                 {isMounted && user ? (
@@ -183,6 +188,7 @@ export default function Home() {
           </div>
         </main>
 
+        {/* --- FOOTER --- */}
         <footer className='bg-white border-t border-gray-100 py-8'>
           <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4'>
             <div className='flex items-center gap-2 opacity-75'>
@@ -192,7 +198,7 @@ export default function Home() {
                   width={24}
                   height={24}
               />
-              <span className='font-semibold text-gray-900'>WorkCore System</span>
+              <span className='font-semibold text-gray-900'>2Work</span>
             </div>
             <p className='text-sm text-gray-500'>
               © {new Date().getFullYear()} WorkCore System. Усі права захищено.
