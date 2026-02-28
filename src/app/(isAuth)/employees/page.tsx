@@ -1,43 +1,40 @@
-"use client";
-import React, { useEffect, useState } from "react";
-import EmployeeBlock from "@/app/(isAuth)/employees/employee.block";
-import { IUser } from "@/interface/IUser";
-import { useMutation } from "@tanstack/react-query";
-import { userService } from "@/service/user.service";
-import { toast } from "sonner";
-import { authService } from "@/service/auth.service";
+'use client'
+
+import React, { useEffect } from 'react'
+import EmployeeBlock from '@/app/(isAuth)/employees/employee.block'
+import { IUser } from '@/interface/IUser'
+import { useGetUserListMutation } from '@/hooks/user/get.user.list.mutation'
+import { useRouter } from 'next/navigation'
+import { PathConfig } from '@/config/path.config'
+import { userStore } from '@/store/user.store'
 
 const Page = () => {
-  const [userList, setUserList] = useState<IUser[]>([]);
-  const { mutate } = useMutation({
-    mutationKey: ["getUsersList"],
-    mutationFn: async () => {
-      const users = await userService.getUsersData();
-      if (!users.data) {
-        toast.error("Не вдалось завантажити користувачів!");
-        await authService.logout();
-      } else setUserList(users.data);
-    },
-  });
-
+  const user = userStore((state) => state.user)
+  const { mutate: fetchUsers, isPending, users } = useGetUserListMutation()
+  const router = useRouter()
   useEffect(() => {
-    mutate();
-  }, []);
-  return (
-    <div className="px-3">
-      <div className="grid grid gap-6 grid-cols-[repeat(auto-fit,minmax(22rem,1fr))]">
-        {userList.map((employee: IUser) => {
-          return (
-            <EmployeeBlock
-              onClick={() => {}}
-              key={employee.id}
-              user={employee}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-};
+    fetchUsers()
+  }, [fetchUsers])
 
-export default Page;
+  return (
+      <div className='p-4 sm:p-6'>
+        {isPending && (
+            <p className='text-gray-500 text-center'>Завантаження користувачів...</p>
+        )}
+        <div className='grid gap-6 grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]'>
+          {users?.map((employee: IUser) => (
+              <EmployeeBlock
+                  onClick={() => {
+                    if (user?.id === employee.id) router.push(PathConfig.PROFILE)
+                    else router.push(`${PathConfig.PROFILE_BY_ID}/${employee.id}`)
+                  }}
+                  key={employee.id}
+                  user={employee}
+              />
+          ))}
+        </div>
+      </div>
+  )
+}
+
+export default Page

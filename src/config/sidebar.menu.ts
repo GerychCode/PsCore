@@ -1,28 +1,39 @@
-import { IconType } from "react-icons";
-import { RiAccountCircleLine } from "react-icons/ri";
-import { PiUsersThreeBold } from "react-icons/pi";
-import { LuLayoutDashboard } from "react-icons/lu";
-import { CgProfile } from "react-icons/cg";
+import { IconType } from 'react-icons'
+import { PiUsersThreeBold } from 'react-icons/pi'
+import { LuLayoutDashboard } from 'react-icons/lu'
+import { CgProfile } from 'react-icons/cg'
+import {FaRegCalendarAlt} from "react-icons/fa";
+import { HiOutlineOfficeBuilding } from "react-icons/hi";
 
 interface ISidebarMenu {
-  title: string;
-  icon?: IconType;
-  path: string;
+  title: string
+  icon?: IconType
+  path: string
 }
 export const sidebarMenuConfig: ISidebarMenu[] = [
   {
-    title: "Профіль",
+    title: 'Профіль',
     icon: CgProfile,
-    path: "/profile",
+    path: '/profile',
   },
   {
-    title: "Головне меню",
+    title: 'Головне меню',
     icon: LuLayoutDashboard,
-    path: "/dashboard",
+    path: '/dashboard',
   },
   {
-    title: "Співробітники",
+    title: 'Співробітники',
     icon: PiUsersThreeBold,
-    path: "/employees",
+    path: '/employees',
   },
-];
+  {
+    title: 'Графік роботи',
+    icon: FaRegCalendarAlt,
+    path: '/schedule',
+  },
+  {
+    title: 'Відділення',
+    icon: HiOutlineOfficeBuilding,
+    path: '/departments',
+  },
+]

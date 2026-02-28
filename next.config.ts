@@ -1,8 +1,20 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  implementation: "sass-embedded",
+  implementation: 'sass-embedded',
   reactStrictMode: false,
-};
+  images: {
+    //Rewrite me
+    remotePatterns: [
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3022',
+        pathname: '/uploads/**',
 
-export default nextConfig;
+      },
+    ],
+  },
+}
+
+export default nextConfig

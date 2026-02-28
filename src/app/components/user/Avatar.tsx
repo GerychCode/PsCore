@@ -1,30 +1,39 @@
-"use client";
-import Image from "next/image";
+import Image from 'next/image'
+import { userStore } from '@/store/user.store'
 
 interface IAvatar {
-  src?: string;
-  size?: number; // в rem
+  avatar?: string
+  size?: number
+  preview?: boolean
 }
 
-export default function Avatar({ src = "/test-ava.jpg", size = 3.5 }: IAvatar) {
-  const remSize = `${size}rem`;
-
+export default function Avatar({
+  avatar,
+  size = 3.5,
+  preview = false,
+}: IAvatar) {
+  const avatarPicture = preview
+    ? avatar
+    : avatar
+      ? `${process.env.NEXT_PUBLIC_SERVER_FILE_STORAGE_PATH}/${avatar}`
+      : '/test-ava.jpg'
+  const remSize = `${size}rem`
   return (
     <div
       style={{ width: remSize, height: remSize }}
-      className="relative rounded-full overflow-hidden flex items-center justify-center shadow-sm shrink-0"
+      className='relative rounded-full overflow-hidden flex items-center justify-center shadow-sm shrink-0'
     >
-      {src ? (
+      {avatarPicture ? (
         <Image
-          src={src}
-          alt="Avatar"
+          src={avatarPicture}
+          alt='Avatar'
           fill
-          className="object-cover"
-          sizes="(max-width: 768px) 100vw, 50px"
+          className='object-cover'
+          sizes='(max-width: 768px) 100vw, 50px'
         />
       ) : (
-        <span className="text-gray-500 text-xs">No image</span>
+        <span className='text-gray-500 text-xs'>No image</span>
       )}
     </div>
-  );
+  )
 }
