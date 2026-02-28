@@ -1,0 +1,64 @@
+services:
+  # ---------------------------------
+  # BACKEND (NestJS)
+  # ---------------------------------
+  server:
+    build:
+      context: ./work-core-server
+      target: production
+    container_name: nest_app_prod
+    restart: unless-stopped
+    ports:
+      - "${APPLICATION_PORT:-3022}:3022"
+    env_file:
+      - ./work-core-server/.env
+    environment:
+      - NODE_ENV=production
+      # Перевизначаємо хости для роботи всередині мережі Docker
+      - POSTGRES_HOST=postgres
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    command: sh -c "npx prisma db push && npm run start:prod"
+    depends_on:
+      - postgres
+      - redis
+
+  client:
+    build:
+      context: ./work-core-client
+      target: development
+    container_name: next_client_dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./work-core-client/.env.local
+    volumes:
+      - ./work-core-client:/app
+      - /app/node_modules
+    depends_on:
+      - server
+
+  postgres:
+    image: postgres:16
+    container_name: postgres_db
+    restart: unless-stopped
+    env_file:
+      - ./work-core-server/.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    image: redis:7
+    container_name: redis_cache
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
