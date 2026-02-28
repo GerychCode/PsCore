@@ -30,7 +30,7 @@ services:
     container_name: next_client_dev
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "1489:3000"
     env_file:
       - ./work-core-client/.env.local
     volumes:
