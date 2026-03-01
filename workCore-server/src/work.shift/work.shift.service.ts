@@ -19,7 +19,7 @@ export class WorkShiftService {
     private prismaService: PrismaService,
     private departmentService: DepartmentService,
   ) {}
-
+//
   async getWorkShifts(user: User, shiftFilterDto: FilterShiftDto) {
     const userIdFilter =
       user.role === Role.Admin ? shiftFilterDto.userId : user.id;
@@ -194,16 +194,32 @@ export class WorkShiftService {
       throw new ForbiddenException('Ви не можете редагувати чужі зміни!');
     }
 
+    if (existShift.status === ShiftStatus.APPROVED) {
+      throw new ForbiddenException(
+        'Заборонено редагувати підтверджений запис. Зверніться до адміністратора.',
+      );
+    }
+
     if (user.role !== Role.Admin) {
       delete updateWorkShiftDto.status;
     }
 
-    const { tagIds, ...restDto } = updateWorkShiftDto;
+    let dataToUpdate = {
+        ...updateWorkShiftDto,
+      };
+
+    if (existShift.status === ShiftStatus.REJECTED) {
+      dataToUpdate = {
+        ...updateWorkShiftDto,
+        status: ShiftStatus.PENDING,
+      };
+    }
+
+
+      const { tagIds, ...restDto } = dataToUpdate;
 
     const changedData = Object.keys(restDto).reduce((acc, key) => {
-      // @ts-ignore
       if (existShift[key] !== restDto[key]) {
-        // @ts-ignore
         acc[key] = restDto[key];
       }
       return acc;
@@ -301,6 +317,15 @@ export class WorkShiftService {
 
     if (user.role !== Role.Admin && user.id !== existEntry.userId) {
       throw new ForbiddenException('Ви не можете видаляти чужі зміни!');
+    }
+
+    if (
+      existEntry.status === ShiftStatus.APPROVED &&
+      user.role !== Role.Admin
+    ) {
+      throw new ForbiddenException(
+        'Заборонено редагувати підтверджений запис. Зверніться до адміністратора.',
+      );
     }
 
     return this.prismaService.workShift.delete({

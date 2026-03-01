@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useEffect } from 'react'
-import { useForm, SubmitHandler } from 'react-hook-form'
+import { SubmitHandler, useForm } from 'react-hook-form'
 import { format } from 'date-fns'
-import { FaTrash, FaUser, FaBuilding, FaPlus } from 'react-icons/fa'
+import { FaBuilding, FaPlus, FaTrash, FaUser } from 'react-icons/fa'
 import MyModal from '@/app/components/Modal'
 import InputComponent from '@/app/components/forms/InputComponent'
 import { IShift, ITag } from '@/interface/IShift'
@@ -11,8 +11,8 @@ import { IUser } from '@/interface/IUser'
 import { IDepartment } from '@/interface/IDepartment'
 import {
   useCreateShiftMutation,
-  useUpdateShiftMutation,
   useDeleteShiftMutation,
+  useUpdateShiftMutation,
 } from '@/hooks/shift/use-shifts.mutations'
 import { IShiftCreate, IShiftUpdate } from '@/service/shift.service'
 import { userStore } from '@/store/user.store'
@@ -25,7 +25,7 @@ interface ShiftModalProps {
   users: IUser[]
   availableTags?: ITag[]
   onManageTags?: () => void
-}
+} //
 
 const ShiftModal: React.FC<ShiftModalProps> = ({
   isOpen,
@@ -51,14 +51,12 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
         date: format(new Date(shift.date), 'yyyy-MM-dd'),
         startedAt: shift.startedAt,
         endTime: shift.endTime,
-        // @ts-ignore
         userId: shift.userId,
         status: shift.status,
         tagIds: shift.tags?.map((t) => String(t.id)) || [], // Перетворюємо в рядок
       })
     } else {
       reset({
-        // @ts-ignore
         userId: user?.id,
         date: format(new Date(), 'yyyy-MM-dd'),
         startedAt: '09:00',
@@ -129,7 +127,11 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
               </button>
               <button
                 type='submit'
-                disabled={isCreating || isUpdating}
+                disabled={
+                  isCreating ||
+                  isUpdating ||
+                  (shift?.status === 'APPROVED' && !isAdmin)
+                }
                 className='rounded-2xl bg-primary text-white px-4 py-2 hover:opacity-90 disabled:opacity-50'
               >
                 Зберегти
@@ -208,8 +210,6 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
                 </select>
               </div>
             )}
-
-            {/* НОВИЙ СТИЛЬ ТЕГІВ A-LA GOOGLE SHEETS */}
             <div className='flex flex-col gap-2'>
               <label className='font-medium'>Теги (маркери)</label>
 
@@ -220,14 +220,12 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
                       key={tag.id}
                       className='relative cursor-pointer group'
                     >
-                      {/* Ховаємо стандартний чекбокс, але залишаємо його функціональним через 'peer' */}
                       <input
                         type='checkbox'
                         value={tag.id}
                         {...register('tagIds')}
                         className='peer sr-only'
                       />
-                      {/* Сама "плашка" тегу */}
                       <span
                         className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-all duration-200 
                           opacity-60 hover:opacity-80 peer-checked:opacity-100 peer-checked:shadow-sm peer-checked:ring-2 peer-checked:ring-offset-1 
@@ -263,7 +261,6 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
                 )}
               </div>
             </div>
-            {/* КІНЕЦЬ БЛОКУ ТЕГІВ */}
           </div>
 
           {isEditMode && (
@@ -272,14 +269,15 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
               onClick={() => {
                 if (shift) deleteShift(shift.id)
               }}
-              className='flex items-center gap-2 text-red-500 font-medium hover:text-red-700 w-fit'
+              disabled={shift?.status === 'APPROVED' && !isAdmin}
+              className='flex items-center gap-2 text-red-500 font-medium hover:text-red-700 w-fit disabled:opacity-50 disabled:cursor-not-allowed transition-opacity'
             >
               <FaTrash /> Видалити зміну
             </button>
           )}
         </form>
       </div>
-    </MyModal>
+    </MyModal> //
   )
 }
 

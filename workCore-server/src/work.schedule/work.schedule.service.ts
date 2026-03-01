@@ -140,7 +140,6 @@ export class WorkScheduleService {
       await this.departmentService.getDepartmentById(updateDto.departmentId);
     }
 
-    // Перевірка на конфлікт розкладу, якщо змінюється користувач або дата
     if (updateDto.userId || updateDto.date) {
       const targetUserId = updateDto.userId || existingSchedule.userId;
 
@@ -151,7 +150,7 @@ export class WorkScheduleService {
             gte: startOfDay(scheduleDate),
             lte: endOfDay(scheduleDate),
           },
-          id: { not: id }, // Виключаємо поточний запис
+          id: { not: id },
         },
       });
 

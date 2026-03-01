@@ -46,6 +46,6 @@ import IORedis from 'ioredis';
       inject: [ConfigService],
     },
   ],
-  exports: [UserService, 'REDIS_CLIENT'], // <-- Додайте цей рядок
+  exports: [UserService, 'REDIS_CLIENT'],
 })
 export class UserModule {}
