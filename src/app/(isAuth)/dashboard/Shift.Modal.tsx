@@ -25,7 +25,7 @@ interface ShiftModalProps {
   users: IUser[]
   availableTags?: ITag[]
   onManageTags?: () => void
-}
+} //
 
 const ShiftModal: React.FC<ShiftModalProps> = ({
   isOpen,
