@@ -1,4 +1,3 @@
-// src/app/layout.tsx
 import type { Metadata } from 'next'
 import { Montserrat } from 'next/font/google'
 import './globals.scss'
@@ -17,23 +16,19 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({
-                                     children,
-                                   }: Readonly<{
+  children,
+}: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-      <html lang='uk'>
+    <html lang='uk'>
       <body className={`${montserrat.variable} antialiased`}>
-      <Providers>
-        {children}
-        <Toaster
-            theme='light'
-            position='bottom-center'
-            duration={1500}
-        />
-        <div id='modal-root' />
-      </Providers>
+        <Providers>
+          {children}
+          <Toaster theme='light' position='bottom-center' duration={1500} />
+          <div id='modal-root' />
+        </Providers>
       </body>
-      </html>
+    </html>
   )
 }
