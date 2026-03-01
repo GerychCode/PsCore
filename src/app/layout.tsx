@@ -14,7 +14,7 @@ const montserrat = Montserrat({
 export const metadata: Metadata = {
   title: 'WorkCore',
 }
-
+//
 export default function RootLayout({
   children,
 }: Readonly<{
