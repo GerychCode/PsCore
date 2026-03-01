@@ -6,9 +6,10 @@ import { UserService } from '../user/user.service';
 import { FileStorageService } from '../file.storage/file.starage.service';
 import { DepartmentService } from '../department/department.service';
 import { UserModule } from '../user/user.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [UserModule],
+  imports: [UserModule, NotificationsModule],
   controllers: [WorkShiftController],
   providers: [
     WorkShiftService,

@@ -40,7 +40,6 @@ export class LoggerMiddleware implements NestMiddleware {
         }
       }
 
-      // Форматуємо рядок логу, додаючи нікнейм/ідентифікатор в кінець
       this.logger.log(
         `${method} ${originalUrl} ${statusCode} ${contentLength} - ${ip} | User: [${userIdentifier}]`,
       );
