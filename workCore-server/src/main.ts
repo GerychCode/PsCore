@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Logger, ValidationPipe } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
 import * as session from 'express-session';
 import ms from './common/utils/ms';
@@ -16,6 +16,8 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const redis = new IORedis(config.getOrThrow<string>('REDIS_URL'));
   app.use(cookieParser(config.getOrThrow<string>('COOKIE_SECRET')));
+
+  const logger = new Logger('Bootstrap');
 
   app.enableCors({
     origin: config.getOrThrow<string>('CORS_ORIGIN'),
@@ -67,6 +69,10 @@ async function bootstrap() {
     },
   );
 
-  await app.listen(config.getOrThrow<number>('APPLICATION_PORT') ?? 3000);
+  const port = config.getOrThrow<number>('APPLICATION_PORT') ?? 3000;
+  await app.listen(port);
+
+  // Выводим сообщение об успешном старте
+  logger.log(`Application is running on: http://localhost:${port}`);
 }
 bootstrap();

@@ -1,16 +1,15 @@
-import { Module } from '@nestjs/common';
-import {IsDevEnv} from "./common/utils/is-dev.utils";
-import {ConfigModule} from "@nestjs/config";
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { IsDevEnv } from './common/utils/is-dev.utils';
+import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
-import {PrismaService} from "./prisma/prisma.service";
 import { DepartmentModule } from './department/department.module';
 import { WorkShiftModule } from './work.shift/work.shift.module';
 import { WorkScheduleModule } from './work.schedule/work.schedule.module';
-import { WorkShiftTagService } from './work.shift.tag/work.shift.tag.service';
 import { WorkShiftTagModule } from './work.shift.tag/work.shift.tag.module';
 
+import { LoggerMiddleware } from './common/middleware/logger.middleware';
 
 @Module({
   imports: [
@@ -24,10 +23,13 @@ import { WorkShiftTagModule } from './work.shift.tag/work.shift.tag.module';
     DepartmentModule,
     WorkShiftModule,
     WorkScheduleModule,
-    WorkScheduleModule,
     WorkShiftTagModule,
   ],
   controllers: [],
   providers: [],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggerMiddleware).forRoutes('*');
+  }
+}
