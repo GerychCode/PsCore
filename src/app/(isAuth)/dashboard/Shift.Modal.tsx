@@ -51,14 +51,12 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
         date: format(new Date(shift.date), 'yyyy-MM-dd'),
         startedAt: shift.startedAt,
         endTime: shift.endTime,
-        // @ts-ignore
         userId: shift.userId,
         status: shift.status,
         tagIds: shift.tags?.map((t) => String(t.id)) || [], // Перетворюємо в рядок
       })
     } else {
       reset({
-        // @ts-ignore
         userId: user?.id,
         date: format(new Date(), 'yyyy-MM-dd'),
         startedAt: '09:00',
@@ -212,8 +210,6 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
                 </select>
               </div>
             )}
-
-            {/* НОВИЙ СТИЛЬ ТЕГІВ A-LA GOOGLE SHEETS */}
             <div className='flex flex-col gap-2'>
               <label className='font-medium'>Теги (маркери)</label>
 
@@ -224,14 +220,12 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
                       key={tag.id}
                       className='relative cursor-pointer group'
                     >
-                      {/* Ховаємо стандартний чекбокс, але залишаємо його функціональним через 'peer' */}
                       <input
                         type='checkbox'
                         value={tag.id}
                         {...register('tagIds')}
                         className='peer sr-only'
                       />
-                      {/* Сама "плашка" тегу */}
                       <span
                         className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-all duration-200 
                           opacity-60 hover:opacity-80 peer-checked:opacity-100 peer-checked:shadow-sm peer-checked:ring-2 peer-checked:ring-offset-1 
@@ -267,7 +261,6 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
                 )}
               </div>
             </div>
-            {/* КІНЕЦЬ БЛОКУ ТЕГІВ */}
           </div>
 
           {isEditMode && (
