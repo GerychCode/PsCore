@@ -9,7 +9,8 @@ import { userStore } from '@/store/user.store'
 export function useGetUserMutation() {
   const {
     mutate,
-    isPending
+    isPending,
+    data,
   } = useMutation<IUser, AxiosError>({
     mutationKey: ['getUser'],
     mutationFn: async () => {
@@ -17,8 +18,8 @@ export function useGetUserMutation() {
       const user = response.data
 
       if (!user) toast.error('Не вдалось завантажити користувачів!')
-      else userStore.getState().updateUser(user);
-      return user;
+      else userStore.getState().updateUser(user)
+      return user
     },
     onError: (error: unknown | Error) => {
       if (axios.isAxiosError(error)) {
@@ -30,5 +31,5 @@ export function useGetUserMutation() {
     },
   })
 
-  return { mutate, isPending }
+  return { mutate, isPending, data }
 }

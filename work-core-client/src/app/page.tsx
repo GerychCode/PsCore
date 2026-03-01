@@ -19,20 +19,18 @@ export default function Home() {
 
   return (
       <div className='min-h-screen bg-white flex flex-col'>
-        {/* --- HEADER --- */}
         <header className='w-full border-b border-gray-100 bg-white/80 backdrop-blur-md fixed top-0 z-50'>
           <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
             <div className='flex justify-between items-center h-16'>
-              {/* Logo */}
               <div className='flex items-center gap-2'>
                 <Image
                     src='/logo.svg'
-                    alt='2Work Logo'
+                    alt='WorkCore'
                     width={32}
                     height={32}
                     className='w-8 h-8'
                 />
-                <span className='font-bold text-xl text-gray-900'>2Work</span>
+                <span className='font-bold text-xl text-gray-900'>WorkCore</span>
               </div>
 
               {/* Auth Buttons або Dashboard */}
@@ -65,7 +63,6 @@ export default function Home() {
           </div>
         </header>
 
-        {/* --- HERO SECTION --- */}
         <main className='flex-grow pt-24 pb-12'>
           <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
             <div className='text-center max-w-3xl mx-auto mt-10 md:mt-20'>

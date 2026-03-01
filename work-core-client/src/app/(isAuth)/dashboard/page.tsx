@@ -224,6 +224,7 @@ const ShiftPage = () => {
       </section>
 
       <div className='bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden'>
+        {/* Шапка таблиці (залишається фіксованою) */}
         <div className='grid grid-cols-[100px_1fr] px-6 py-3 bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider'>
           <div>Дата</div>
           <div
@@ -238,7 +239,8 @@ const ShiftPage = () => {
           </div>
         </div>
 
-        <div className='divide-y divide-gray-100'>
+        {/* Тіло таблиці зі скролом */}
+        <div className='divide-y divide-gray-100 overflow-y-auto max-h-[60vh]'>
           {visibleShifts.length === 0 ? (
             <div className='py-12 flex flex-col items-center justify-center text-gray-400'>
               <FaFilter className='text-4xl mb-3 opacity-20' />
@@ -248,7 +250,7 @@ const ShiftPage = () => {
             visibleShifts.map((item) => (
               <div
                 key={item.id}
-                className='grid grid-cols-[100px_1fr] px-6 py-4 text-sm text-gray-800 hover:bg-gray-50 transition-colors cursor-pointer items-start'
+                className='grid grid-cols-[100px_1fr] px-6 py-6 min-h-[80px] text-sm text-gray-800 hover:bg-gray-50 transition-colors cursor-pointer items-center'
                 onClick={() => handleOpenEdit(item)}
               >
                 <div className='font-medium text-gray-900 pt-1'>
@@ -348,7 +350,6 @@ const ShiftPage = () => {
           )}
         </div>
       </div>
-
       <div className='flex justify-end items-center gap-2 mt-2'>
         <span className='text-gray-500 text-sm'>Всього годин:</span>
         <span className='text-primary text-xl font-bold'>
