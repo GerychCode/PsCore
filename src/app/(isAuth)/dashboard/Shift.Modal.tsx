@@ -1,21 +1,21 @@
 'use client'
 
-import React, { useEffect } from 'react'
-import { SubmitHandler, useForm } from 'react-hook-form'
-import { format } from 'date-fns'
-import { FaBuilding, FaPlus, FaTrash, FaUser } from 'react-icons/fa'
+import React, {useEffect} from 'react'
+import {SubmitHandler, useForm} from 'react-hook-form'
+import {format} from 'date-fns'
+import {FaBuilding, FaPlus, FaTrash, FaUser} from 'react-icons/fa'
 import MyModal from '@/app/components/Modal'
 import InputComponent from '@/app/components/forms/InputComponent'
-import { IShift, ITag } from '@/interface/IShift'
-import { IUser } from '@/interface/IUser'
-import { IDepartment } from '@/interface/IDepartment'
+import {IShift, ITag} from '@/interface/IShift'
+import {IUser} from '@/interface/IUser'
+import {IDepartment} from '@/interface/IDepartment'
 import {
   useCreateShiftMutation,
   useDeleteShiftMutation,
   useUpdateShiftMutation,
 } from '@/hooks/shift/use-shifts.mutations'
-import { IShiftCreate, IShiftUpdate } from '@/service/shift.service'
-import { userStore } from '@/store/user.store'
+import {IShiftCreate, IShiftUpdate} from '@/service/shift.service'
+import {userStore} from '@/store/user.store'
 
 interface ShiftModalProps {
   isOpen: boolean
@@ -26,7 +26,7 @@ interface ShiftModalProps {
   availableTags?: ITag[]
   onManageTags?: () => void
 }
-//
+
 
 const ShiftModal: React.FC<ShiftModalProps> = ({
   isOpen,
