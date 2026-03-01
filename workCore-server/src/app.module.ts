@@ -8,13 +8,25 @@ import {PrismaService} from "./prisma/prisma.service";
 import { DepartmentModule } from './department/department.module';
 import { WorkShiftModule } from './work.shift/work.shift.module';
 import { WorkScheduleModule } from './work.schedule/work.schedule.module';
+import { WorkShiftTagService } from './work.shift.tag/work.shift.tag.service';
+import { WorkShiftTagModule } from './work.shift.tag/work.shift.tag.module';
 
 
 @Module({
-  imports: [ConfigModule.forRoot({
-    isGlobal: true,
-    ignoreEnvFile: !IsDevEnv,
-  }), PrismaModule, AuthModule, UserModule, DepartmentModule, WorkShiftModule, WorkScheduleModule, WorkScheduleModule],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      ignoreEnvFile: !IsDevEnv,
+    }),
+    PrismaModule,
+    AuthModule,
+    UserModule,
+    DepartmentModule,
+    WorkShiftModule,
+    WorkScheduleModule,
+    WorkScheduleModule,
+    WorkShiftTagModule,
+  ],
   controllers: [],
   providers: [],
 })

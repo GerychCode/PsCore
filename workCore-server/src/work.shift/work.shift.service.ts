@@ -196,7 +196,6 @@ export class WorkShiftService {
 
     if (user.role !== Role.Admin) {
       delete updateWorkShiftDto.status;
-      delete updateWorkShiftDto.tagIds;
     }
 
     const { tagIds, ...restDto } = updateWorkShiftDto;
