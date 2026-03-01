@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import { format } from 'date-fns'
-import { FaTrash, FaUser, FaBuilding } from 'react-icons/fa'
+import { FaTrash, FaUser, FaBuilding, FaPlus } from 'react-icons/fa'
 import MyModal from '@/app/components/Modal'
 import InputComponent from '@/app/components/forms/InputComponent'
 import { IShift, ITag } from '@/interface/IShift'
@@ -24,6 +24,7 @@ interface ShiftModalProps {
   departments: IDepartment[]
   users: IUser[]
   availableTags?: ITag[]
+  onManageTags?: () => void
 }
 
 const ShiftModal: React.FC<ShiftModalProps> = ({
@@ -33,13 +34,14 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
   departments,
   users,
   availableTags = [],
+  onManageTags,
 }) => {
   const isAdmin = userStore((state) => state.isAdmin)
   const isEditMode = !!shift
   const user = userStore((state) => state.user)
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<
-    IShiftCreate & { status?: string; tagIds?: number[] }
+    IShiftCreate & { status?: string; tagIds?: string[] } // Використовуємо string[]
   >()
 
   useEffect(() => {
@@ -52,7 +54,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
         // @ts-ignore
         userId: shift.userId,
         status: shift.status,
-        tagIds: shift.tags?.map((t) => t.id) || [],
+        tagIds: shift.tags?.map((t) => String(t.id)) || [], // Перетворюємо в рядок
       })
     } else {
       reset({
@@ -75,7 +77,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
   const { mutate: deleteShift } = useDeleteShiftMutation(onClose)
 
   const onSubmit: SubmitHandler<
-    IShiftCreate & { status?: string; tagIds?: number[] }
+    IShiftCreate & { status?: string; tagIds?: string[] }
   > = (data) => {
     const payload: any = {
       ...data,
@@ -127,7 +129,11 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
               </button>
               <button
                 type='submit'
-                disabled={isCreating || isUpdating}
+                disabled={
+                  isCreating ||
+                  isUpdating ||
+                  (shift?.status === 'APPROVED' && !isAdmin)
+                }
                 className='rounded-2xl bg-primary text-white px-4 py-2 hover:opacity-90 disabled:opacity-50'
               >
                 Зберегти
@@ -207,37 +213,61 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
               </div>
             )}
 
-            {isAdmin && isEditMode && availableTags.length > 0 && (
-              <div className='flex flex-col gap-2'>
-                <label className='font-medium'>Теги (маркери)</label>
-                <div className='flex flex-wrap gap-2 p-3 border-2 border-gray-200 rounded-2xl'>
-                  {availableTags.map((tag) => (
+            {/* НОВИЙ СТИЛЬ ТЕГІВ A-LA GOOGLE SHEETS */}
+            <div className='flex flex-col gap-2'>
+              <label className='font-medium'>Теги (маркери)</label>
+
+              <div className='flex flex-wrap gap-2 p-3 border-2 border-gray-100 bg-gray-50/50 rounded-2xl'>
+                {availableTags.length > 0 ? (
+                  availableTags.map((tag) => (
                     <label
                       key={tag.id}
-                      className='flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-2 rounded-xl hover:bg-gray-100'
+                      className='relative cursor-pointer group'
                     >
+                      {/* Ховаємо стандартний чекбокс, але залишаємо його функціональним через 'peer' */}
                       <input
                         type='checkbox'
                         value={tag.id}
                         {...register('tagIds')}
-                        className='w-4 h-4 text-primary rounded'
+                        className='peer sr-only'
                       />
+                      {/* Сама "плашка" тегу */}
                       <span
-                        className={`text-sm font-medium ${
-                          tag.severity === 3
-                            ? 'text-red-600'
-                            : tag.severity === 2
-                              ? 'text-yellow-600'
-                              : 'text-green-600'
-                        }`}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-all duration-200 
+                          opacity-60 hover:opacity-80 peer-checked:opacity-100 peer-checked:shadow-sm peer-checked:ring-2 peer-checked:ring-offset-1 
+                          ${
+                            tag.severity === 3
+                              ? 'bg-red-100 text-red-700 border-red-200 peer-checked:ring-red-400'
+                              : tag.severity === 2
+                                ? 'bg-yellow-100 text-yellow-700 border-yellow-200 peer-checked:ring-yellow-400'
+                                : 'bg-green-100 text-green-700 border-green-200 peer-checked:ring-green-400'
+                          }`}
                       >
                         {tag.name}
                       </span>
                     </label>
-                  ))}
-                </div>
+                  ))
+                ) : (
+                  <span className='text-sm text-gray-400 italic flex items-center h-[34px]'>
+                    Немає доступних тегів
+                  </span>
+                )}
+
+                {/* Кнопка "+" в кінці списку, видима тільки для Admin */}
+                {isAdmin && (
+                  <button
+                    type='button'
+                    onClick={onManageTags}
+                    className='flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white text-primary border border-dashed border-primary/50 hover:bg-blue-50 hover:border-primary transition-colors cursor-pointer text-sm font-medium ml-1'
+                    title='Створити або видалити теги'
+                  >
+                    <FaPlus size={10} />
+                    Створити
+                  </button>
+                )}
               </div>
-            )}
+            </div>
+            {/* КІНЕЦЬ БЛОКУ ТЕГІВ */}
           </div>
 
           {isEditMode && (
@@ -246,7 +276,8 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
               onClick={() => {
                 if (shift) deleteShift(shift.id)
               }}
-              className='flex items-center gap-2 text-red-500 font-medium hover:text-red-700 w-fit'
+              disabled={shift?.status === 'APPROVED' && !isAdmin}
+              className='flex items-center gap-2 text-red-500 font-medium hover:text-red-700 w-fit disabled:opacity-50 disabled:cursor-not-allowed transition-opacity'
             >
               <FaTrash /> Видалити зміну
             </button>
