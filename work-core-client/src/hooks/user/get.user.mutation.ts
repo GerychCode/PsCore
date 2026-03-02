@@ -1,17 +1,12 @@
 import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { userService } from '@/service/user.service'
-import axios from 'axios'
-import { AxiosError } from 'axios'
+import axios, { AxiosError } from 'axios'
 import { IUser } from '@/interface/IUser'
 import { userStore } from '@/store/user.store'
 
 export function useGetUserMutation() {
-  const {
-    mutate,
-    isPending,
-    data,
-  } = useMutation<IUser, AxiosError>({
+  const { mutate, isPending, data } = useMutation<IUser, AxiosError>({
     mutationKey: ['getUser'],
     mutationFn: async () => {
       const response = await userService.getUserData()

@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState } from 'react'
 import { useGetShiftListMutation } from '@/hooks/shift/get.shift.list.mutation'
-import { parseISO, format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { uk } from 'date-fns/locale'
 import { IShift } from '@/interface/IShift'
 import { IoMdAdd, IoMdDocument } from 'react-icons/io'
-import { FaCheck, FaTimes, FaTrash, FaFilter, FaCircle } from 'react-icons/fa'
+import { FaCheck, FaCircle, FaFilter, FaTimes, FaTrash } from 'react-icons/fa'
 import { userStore } from '@/store/user.store'
 import ShiftModal from './Shift.Modal'
 import TagModal from './Tag.Modal' // <-- Додано імпорт
@@ -14,10 +14,7 @@ import { useGetDepartmentListMutation } from '@/hooks/department/use-get-departm
 import { useGetUserListMutation } from '@/hooks/user/get.user.list.mutation'
 import MyModal from '@/app/components/Modal'
 import Avatar from '@/app/components/user/Avatar'
-import {
-  useUpdateShiftMutation,
-  useDeleteShiftMutation,
-} from '@/hooks/shift/use-shifts.mutations'
+import { useDeleteShiftMutation } from '@/hooks/shift/use-shifts.mutations'
 import { useGetTagsQuery } from '@/hooks/shift.tag/get.tags.query'
 
 const statusColorMap: Record<string, string> = {
