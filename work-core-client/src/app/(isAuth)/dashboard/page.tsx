@@ -74,6 +74,16 @@ const ShiftPage = () => {
   const { mutate: deleteShift } = useDeleteShiftMutation(fetchShifts)
 
   useEffect(() => {
+    const handleInvalidate = () => fetchShifts()
+
+    window.addEventListener('invalidate_shifts', handleInvalidate)
+
+    return () => {
+      window.removeEventListener('invalidate_shifts', handleInvalidate)
+    }
+  }, [fetchShifts])
+
+  useEffect(() => {
     fetchShifts()
     fetchDepartments()
     if (isAdmin) fetchUsers()

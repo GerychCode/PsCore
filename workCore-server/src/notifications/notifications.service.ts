@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service'; // Перевірте шлях до PrismaService
-import { NotificationsGateway } from './notifications.gateway';
 import { NotificationType } from '../../generated/prisma';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gateway: NotificationsGateway,
+    private eventsGateway: EventsGateway,
   ) {}
 
   // 1. Створення повідомлення (зберігає в БД і відправляє по сокетах)
@@ -26,7 +26,7 @@ export class NotificationsService {
     });
 
     // Відправляємо збережений об'єкт (з ID, isRead та createdAt) користувачу
-    this.gateway.sendNotificationToUser(userId, notification);
+    this.eventsGateway.emitToUser(userId, 'new_notification', notification);
 
     return notification;
   }

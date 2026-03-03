@@ -14,6 +14,8 @@ import NotificationType = $Enums.NotificationType;
 import { UpdateWorkShiftDto } from './dto/update.work.shift.dto.ts';
 import { FilterShiftDto } from './dto/shift.filter.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { UserService } from '../user/user.service';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class WorkShiftService {
@@ -21,6 +23,8 @@ export class WorkShiftService {
     private notificationsService: NotificationsService,
     private prismaService: PrismaService,
     private departmentService: DepartmentService,
+    private readonly userService: UserService,
+    private eventsGateway: EventsGateway,
   ) {}
   async getWorkShifts(user: User, shiftFilterDto: FilterShiftDto) {
     const userIdFilter =
@@ -169,8 +173,7 @@ export class WorkShiftService {
     const status =
       user.role === Role.Admin ? ShiftStatus.APPROVED : ShiftStatus.PENDING;
 
-
-    return this.prismaService.workShift.create({
+    const newShift = this.prismaService.workShift.create({
       data: {
         date: shiftDate.toISOString(),
         startedAt: createWorkShiftDto.startedAt,
@@ -184,6 +187,11 @@ export class WorkShiftService {
         },
       },
     });
+
+    const adminIds = await this.userService.getAdmins();
+    this.eventsGateway.emitToUsers(adminIds, 'invalidate_shifts');
+
+    return newShift;
   }
 
   async updateWorkShiftDto(
@@ -268,7 +276,6 @@ export class WorkShiftService {
 
     this.validateWorkShift(dayShifts, startedAt, endAt, departmentId, id);
 
-    // Зберігаємо результат оновлення у змінну
     const updatedShift = await this.prismaService.workShift.update({
       where: { id },
       data: {
@@ -283,10 +290,11 @@ export class WorkShiftService {
       include: { tags: true },
     });
 
-    // --- Логіка сповіщень ---
     const isOwner = user.id === existShift.userId;
     const statusChangedTo = changedData['status'];
-    const formattedDate = new Date(shiftDate).toLocaleDateString('uk-UA').replace(/\./g, '-');
+    const formattedDate = new Date(shiftDate)
+      .toLocaleDateString('uk-UA')
+      .replace(/\./g, '-');
 
     let notify = false;
     let title = '';
@@ -301,13 +309,11 @@ export class WorkShiftService {
       title = 'Зміну відхилено';
       message = `Вашу зміну за ${formattedDate} відхилено адміністратором.`;
     } else if (!isOwner) {
-      // Якщо адмін просто оновив час, департамент тощо, і це не зміна статусу
       notify = true;
       title = 'Зміну оновлено';
       message = `Вашу зміну за ${formattedDate} було оновлено адміністратором.`;
     }
 
-    // Відправляємо сповіщення, якщо була дія і її виконав не сам власник запису
     if (notify && !isOwner) {
       await this.notificationsService.createNotification(existShift.userId, {
         title,

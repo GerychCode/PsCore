@@ -19,9 +19,9 @@ import { Redis } from 'ioredis';
 @Injectable()
 export class UserService {
   constructor(
-      private readonly prismaService: PrismaService,
-      private readonly fileStorageService: FileStorageService,
-      @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
+    private readonly prismaService: PrismaService,
+    private readonly fileStorageService: FileStorageService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
   ) {}
 
   public async generateTelegramCode(userId: number): Promise<string> {
@@ -96,9 +96,9 @@ export class UserService {
   }
 
   public async updateUser(
-      updateUserDto: UpdateUserDto | UpdateUserDtoAdmin,
-      id?: number | undefined,
-      user?: User,
+    updateUserDto: UpdateUserDto | UpdateUserDtoAdmin,
+    id?: number | undefined,
+    user?: User,
   ) {
     if (Object.keys(updateUserDto).length === 0)
       throw new BadRequestException('Ви не обновили жодної строки!');
@@ -150,8 +150,8 @@ export class UserService {
     });
     if (!user) throw new NotFoundException(`Користувача не знайдено`);
     const validPassword = bcrypt.compareSync(
-        passwordDto.password,
-        user.passwordHash,
+      passwordDto.password,
+      user.passwordHash,
     );
     if (!validPassword) throw new BadRequestException('Невірний пароль!');
 
@@ -173,5 +173,13 @@ export class UserService {
       this.fileStorageService.deleteFile(oldImagePath);
     }
     return updatedUser;
+  }
+
+  async getAdmins() {
+    const admins = await this.prismaService.user.findMany({
+      where: { role: Role.Admin },
+      select: { id: true },
+    });
+    return admins.map((a) => a.id);
   }
 }

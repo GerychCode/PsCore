@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { IoIosMenu, IoIosSettings } from 'react-icons/io'
 import { Sidebar } from '@/app/components/Sidebar/Sidebar'
 import { FaBell, FaTrash } from 'react-icons/fa'
@@ -8,8 +8,9 @@ import { useGetUserMutation } from '@/hooks/user/get.user.mutation'
 import { PathConfig, routeLabels } from '@/config/path.config'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { io, Socket } from 'socket.io-client'
 import { axiosClassic } from '@/api/interceptors'
+
+import { useWebSockets } from '@/hooks/useWebSockets'
 
 export interface AppNotification {
   id: number
@@ -39,46 +40,51 @@ export default function Layout({
     mutate()
   }, [])
 
-  useEffect(() => {
+  // 1. Виносимо запит за списком в окрему функцію
+  const fetchNotifications = useCallback(async () => {
     if (!userData?.id) return
-    const fetchNotifications = async () => {
-      try {
-        const response =
-          await axiosClassic.get<AppNotification[]>('/notifications')
-        setNotifications(response.data)
-      } catch (error) {}
-    }
-    fetchNotifications()
+    try {
+      const response =
+        await axiosClassic.get<AppNotification[]>('/notifications')
+      setNotifications(response.data)
+    } catch (error) {}
   }, [userData?.id])
 
+  // 2. Отримуємо список при першому завантаженні (або зміні userData.id)
   useEffect(() => {
-    if (!userData?.id) return
-    const socket: Socket = io(
-      process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3022',
-      {
-        withCredentials: true,
-        query: { userId: userData.id },
-      }
-    )
+    fetchNotifications()
+  }, [fetchNotifications])
 
-    socket.on('new_notification', (data: AppNotification) => {
-      try {
-        new Audio('/notification.mp3').play().catch(() => {})
-      } catch (error) {}
+  // 3. Слухаємо кастомну подію invalidate_shifts для оновлення списку
+  useEffect(() => {
+    const handleInvalidateShifts = () => {
+      // Оновлюємо список сповіщень
+      fetchNotifications()
 
-      const newNotification = {
-        ...data,
-        id: data.id || Date.now() + Math.random(),
-      }
-      setNotifications((prev) => [newNotification as AppNotification, ...prev])
-    })
+      // Якщо ця подія також має оновлювати дані профілю юзера,
+      // можеш додатково викликати mutate():
+      // mutate()
+    }
+
+    window.addEventListener('invalidate_shifts', handleInvalidateShifts)
 
     return () => {
-      socket.off('new_notification')
-      socket.disconnect()
+      window.removeEventListener('invalidate_shifts', handleInvalidateShifts)
     }
-  }, [userData?.id])
+  }, [fetchNotifications])
 
+  // Обробка нових сповіщень через сокети
+  const handleNewNotification = useCallback(
+    (newNotification: AppNotification) => {
+      setNotifications((prev) => [newNotification, ...prev])
+    },
+    []
+  )
+
+  // Виклик винесеного хука
+  useWebSockets(handleNewNotification)
+
+  // Обробка кліку поза вікном сповіщень
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
