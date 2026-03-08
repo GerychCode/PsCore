@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   eachDayOfInterval,
   endOfWeek,
@@ -34,7 +34,6 @@ export default function Page() {
   >(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  // Завантаження списку користувачів для адміна
   const { mutate: fetchUsers, users } = useGetUserListMutation()
 
   const { mutate: getWeekView, isPending } = useGetWeekViewMutation(
@@ -48,84 +47,135 @@ export default function Page() {
     }
   )
 
+  const { weekStart, weekEnd, weekDays } = useMemo(() => {
+    const start = startOfWeek(currentDate, { weekStartsOn: 1 })
+    const end = endOfWeek(currentDate, { weekStartsOn: 1 })
+    const days = eachDayOfInterval({ start, end })
+    return { weekStart: start, weekEnd: end, weekDays: days }
+  }, [currentDate])
+
   useEffect(() => {
     getWeekView()
     if (isAdmin) {
       fetchUsers()
     }
-  }, [currentDate, isAdmin])
+  }, [currentDate, isAdmin, fetchUsers])
 
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
-  const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 })
-  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
-
-  const handleLockClick = (departmentId: number, isLocked: boolean) => {
-    if (!isAdmin) return
-    toggleLock({
-      departmentId,
-      date: format(weekStart, 'yyyy-MM-dd'),
-      isLocked: !isLocked,
-    })
-  }
-
-  const handleCellClick = (
-    schedule: IWorkSchedule | null,
-    userId: number,
-    departmentId: number,
-    date: Date,
-    isLocked: boolean
-  ) => {
-    const canEdit = isAdmin || (user?.id === userId && !isLocked)
-
-    if (!canEdit) {
-      if (isLocked) toast.error('Цей тиждень заблоковано для редагування.')
-      return
+  useEffect(() => {
+    const handleInvalidateSchedules = () => {
+      getWeekView()
     }
 
-    if (schedule) {
-      setSelectedSchedule(schedule)
-    } else {
-      setSelectedSchedule({
-        userId: userId,
+    window.addEventListener('invalidate_schedules', handleInvalidateSchedules)
+
+    return () => {
+      window.removeEventListener(
+        'invalidate_schedules',
+        handleInvalidateSchedules
+      )
+    }
+  }, [getWeekView])
+
+  const handleLockClick = useCallback(
+    (departmentId: number, isLocked: boolean) => {
+      if (!isAdmin) return
+      toggleLock({
         departmentId,
-        date: format(date, 'yyyy-MM-dd'),
-        startedAt: '09:00',
-        endTime: '18:00',
-        isDayOff: false,
+        date: format(weekStart, 'yyyy-MM-dd'),
+        isLocked: !isLocked,
       })
-    }
-    setIsModalOpen(true)
-  }
+    },
+    [isAdmin, toggleLock, weekStart]
+  )
 
-  const handleAddClick = (departmentId: number, isLocked: boolean) => {
-    const canEdit = isAdmin || !isLocked
+  const handleCellClick = useCallback(
+    (
+      schedule: IWorkSchedule | null,
+      userId: number,
+      departmentId: number,
+      date: Date,
+      isLocked: boolean
+    ) => {
+      const canEdit = isAdmin || (user?.id === userId && !isLocked)
 
-    if (!canEdit) {
-      toast.error('Цей тиждень заблоковано для редагування.')
-      return
-    }
+      if (!canEdit) {
+        if (isLocked) toast.error('Цей тиждень заблоковано для редагування.')
+        return
+      }
 
-    if (user) {
-      const date = weekDays[0]
-      setSelectedSchedule({
-        userId: user.id, // Адмін зможе змінити це в модалці
-        departmentId,
-        date: format(date, 'yyyy-MM-dd'),
-        startedAt: '09:00',
-        endTime: '18:00',
-        isDayOff: false,
-      })
+      if (schedule) {
+        setSelectedSchedule(schedule)
+      } else {
+        setSelectedSchedule({
+          userId: userId,
+          departmentId,
+          date: format(date, 'yyyy-MM-dd'),
+          startedAt: '09:00',
+          endTime: '18:00',
+          isDayOff: false,
+        })
+      }
       setIsModalOpen(true)
-    }
-  }
+    },
+    [isAdmin, user?.id]
+  )
 
-  const goToPreviousWeek = () => {
+  const handleEmptyCellClick = useCallback(
+    (departmentId: number, date: Date, isLocked: boolean) => {
+      const canEdit = isAdmin || !isLocked
+
+      if (!canEdit) {
+        toast.error('Цей тиждень заблоковано для редагування.')
+        return
+      }
+
+      if (user) {
+        setSelectedSchedule({
+          userId: user.id,
+          departmentId,
+          date: format(date, 'yyyy-MM-dd'),
+          startedAt: '09:00',
+          endTime: '18:00',
+          isDayOff: false,
+        })
+        setIsModalOpen(true)
+      }
+    },
+    [isAdmin, user]
+  )
+
+  const handleAddClick = useCallback(
+    (departmentId: number, isLocked: boolean) => {
+      const canEdit = isAdmin || !isLocked
+
+      if (!canEdit) {
+        toast.error('Цей тиждень заблоковано для редагування.')
+        return
+      }
+
+      if (user) {
+        const date = weekDays[0]
+        setSelectedSchedule({
+          userId: user.id,
+          departmentId,
+          date: format(date, 'yyyy-MM-dd'),
+          startedAt: '09:00',
+          endTime: '18:00',
+          isDayOff: false,
+        })
+        setIsModalOpen(true)
+      }
+    },
+    [isAdmin, user, weekDays]
+  )
+
+  const goToPreviousWeek = useCallback(() => {
     setCurrentDate((prev) => subDays(prev, 7))
-  }
+  }, [])
 
-  const goToNextWeek = () => {
+  const goToNextWeek = useCallback(() => {
     setCurrentDate((prev) => addDays(prev, 7))
-  }
+  }, [])
 
   return (
     <main className='p-8 max-w-full mx-auto'>
@@ -157,19 +207,30 @@ export default function Page() {
           <table className='w-full text-center border-collapse'>
             <thead>
               <tr>
-                <th className='w-[15%] text-left p-4 text-sm font-semibold text-secondary uppercase border-b border-gray-200'>
+                <th className='w-[15%] text-left p-4 text-sm font-semibold text-secondary uppercase border-b border-gray-200 align-bottom'>
                   Співробітник
                 </th>
                 {weekDays.map((day) => (
                   <th
                     key={day.toISOString()}
-                    className={`p-4 text-sm font-semibold uppercase border-b border-gray-200 ${
-                      isToday(day)
-                        ? 'text-primary bg-primary/10'
-                        : 'text-secondary'
+                    className={`p-4 border-b border-gray-200 ${
+                      isToday(day) ? 'bg-primary/5' : ''
                     }`}
                   >
-                    {format(day, 'E', { locale: uk }).slice(0, 2)}
+                    <div className='flex flex-col items-center justify-center gap-1'>
+                      <span
+                        className={`text-xs uppercase font-medium ${isToday(day) ? 'text-primary' : 'text-gray-500'}`}
+                      >
+                        {format(day, 'E', { locale: uk }).slice(0, 2)}
+                      </span>
+                      <span
+                        className={`text-base font-bold ${
+                          isToday(day) ? 'text-primary' : 'text-gray-800'
+                        }`}
+                      >
+                        {format(day, 'd')}
+                      </span>
+                    </div>
                   </th>
                 ))}
               </tr>
@@ -220,6 +281,7 @@ export default function Page() {
                               )
                             }
                             className='p-1.5 rounded-full hover:bg-gray-200 transition'
+                            title='Додати зміну у це відділення'
                           >
                             <FiPlus className='text-primary' />
                           </button>
@@ -227,6 +289,7 @@ export default function Page() {
                       </div>
                     </td>
                   </tr>
+
                   {department.users.map((employee) => (
                     <tr key={employee.userId} className='hover:bg-gray-50'>
                       <td className='text-left p-4 font-semibold text-gray-800 border-b border-gray-200'>
@@ -276,6 +339,40 @@ export default function Page() {
                       })}
                     </tr>
                   ))}
+
+                  <tr className='border-b border-gray-200 bg-white hover:bg-gray-50 transition-colors'>
+                    <td className='text-left p-4 text-sm text-gray-400 italic font-medium'>
+                      <div className='flex items-center gap-2'>
+                        <FiPlus className='text-gray-400' /> Додати собі зміну
+                      </div>
+                    </td>
+                    {weekDays.map((day) => {
+                      const canAdd = isAdmin || !department.isLocked
+
+                      return (
+                        <td
+                          key={`empty-${department.departmentId}-${day.toISOString()}`}
+                          className={`p-4 font-bold text-gray-300 transition-colors ${
+                            isToday(day) ? 'bg-primary/5' : ''
+                          } ${
+                            canAdd
+                              ? 'cursor-pointer hover:bg-primary/10 hover:text-primary rounded-md'
+                              : 'cursor-not-allowed opacity-50'
+                          }`}
+                          onClick={() =>
+                            handleEmptyCellClick(
+                              department.departmentId,
+                              day,
+                              department.isLocked
+                            )
+                          }
+                          title='Натисни, щоб виставити собі графік на цей день'
+                        >
+                          -
+                        </td>
+                      )
+                    })}
+                  </tr>
                 </React.Fragment>
               ))}
             </tbody>

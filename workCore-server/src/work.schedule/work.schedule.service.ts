@@ -22,6 +22,7 @@ import { UpdateWorkScheduleDto } from './dto/update-work-schedule.dto';
 import { FilterWorkScheduleDto } from './dto/filter-work-schedule.dto';
 import { LockWeekDto } from './dto/lock-week.dto';
 import { Role, User } from '../../generated/prisma';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class WorkScheduleService {
@@ -29,6 +30,7 @@ export class WorkScheduleService {
     private prismaService: PrismaService,
     private departmentService: DepartmentService,
     private userService: UserService,
+    private eventsGateway: EventsGateway,
   ) {}
 
   async getWorkSchedules(filterDto: FilterWorkScheduleDto) {
@@ -112,12 +114,16 @@ export class WorkScheduleService {
       );
     }
 
-    return this.prismaService.workSchedule.create({
+    const newSchedule = await this.prismaService.workSchedule.create({
       data: {
         ...createDto,
         date: scheduleDate.toISOString(),
       },
     });
+
+    this.eventsGateway.server.emit('invalidate_schedules');
+
+    return newSchedule;
   }
 
   async updateWorkSchedule(
@@ -173,13 +179,17 @@ export class WorkScheduleService {
       );
     }
 
-    return this.prismaService.workSchedule.update({
+    const updatedSchedule = await this.prismaService.workSchedule.update({
       where: { id },
       data: {
         ...updateDto,
         ...(updateDto.date && { date: scheduleDate.toISOString() }),
       },
     });
+
+    this.eventsGateway.server.emit('invalidate_schedules');
+
+    return updatedSchedule;
   }
 
   async deleteWorkSchedule(user: User, id: number) {
@@ -195,9 +205,13 @@ export class WorkScheduleService {
       user,
     );
 
-    return this.prismaService.workSchedule.delete({
+    const deletedSchedule = await this.prismaService.workSchedule.delete({
       where: { id },
     });
+
+    this.eventsGateway.server.emit('invalidate_schedules');
+
+    return deletedSchedule;
   }
 
   async getWeekView(date: string) {
@@ -285,7 +299,7 @@ export class WorkScheduleService {
   async toggleWeekLock(dto: LockWeekDto) {
     const weekStart = startOfWeek(new Date(dto.date), { weekStartsOn: 1 });
 
-    return this.prismaService.workScheduleLock.upsert({
+    const result = await this.prismaService.workScheduleLock.upsert({
       where: {
         departmentId_weekStart: {
           departmentId: dto.departmentId,
@@ -301,6 +315,10 @@ export class WorkScheduleService {
         isLocked: dto.isLocked,
       },
     });
+
+    this.eventsGateway.server.emit('invalidate_schedules');
+
+    return result;
   }
 
   private async checkWeekLock(departmentId: number, date: Date, user: User) {

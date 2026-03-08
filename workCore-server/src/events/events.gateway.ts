@@ -59,4 +59,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   emitToUsers(userIds: number[], event: string, payload?: any) {
     userIds.forEach((userId) => this.emitToUser(userId, event, payload));
   }
+
+  emitToAll(event: string, payload?: any) {
+    this.server.emit(event, payload);
+  }
 }

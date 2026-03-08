@@ -39,9 +39,14 @@ export const useWebSockets = (
       window.dispatchEvent(new CustomEvent('invalidate_shifts'))
     })
 
+    socketInstance.on('invalidate_schedules', () => {
+      window.dispatchEvent(new CustomEvent('invalidate_schedules'))
+    })
+
     return () => {
       socketInstance.off('new_notification')
       socketInstance.off('invalidate_shifts')
+      socketInstance.off('invalidate_schedules')
       socketInstance.disconnect()
     }
   }, [user?.id, onNotification])
