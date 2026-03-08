@@ -32,7 +32,6 @@ export const useWebSockets = (
         id: data.id || Date.now() + Math.random(),
       }
 
-      // Передаємо нове сповіщення нагору
       onNotification(newNotification as AppNotification)
     })
 

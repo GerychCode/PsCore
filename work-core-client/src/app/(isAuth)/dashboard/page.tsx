@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useGetShiftListMutation } from '@/hooks/shift/get.shift.list.mutation'
 import { format, parseISO } from 'date-fns'
 import { uk } from 'date-fns/locale'
@@ -9,7 +9,7 @@ import { IoMdAdd, IoMdDocument } from 'react-icons/io'
 import { FaCheck, FaCircle, FaFilter, FaTimes, FaTrash } from 'react-icons/fa'
 import { userStore } from '@/store/user.store'
 import ShiftModal from './Shift.Modal'
-import TagModal from './Tag.Modal' // <-- Додано імпорт
+import TagModal from './Tag.Modal'
 import { useGetDepartmentListMutation } from '@/hooks/department/use-get-department-list.mutation'
 import { useGetUserListMutation } from '@/hooks/user/get.user.list.mutation'
 import MyModal from '@/app/components/Modal'
@@ -53,7 +53,6 @@ const ShiftPage = () => {
     useGetDepartmentListMutation()
   const { mutate: fetchUsers, users } = useGetUserListMutation()
 
-  // Отримуємо всі доступні теги з бази
   const { data: allTags } = useGetTagsQuery()
 
   const [selectedMonth, setSelectedMonth] = useState<number>(
@@ -67,11 +66,45 @@ const ShiftPage = () => {
   const [selectedTagId, setSelectedTagId] = useState<string>('')
 
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
-  const [isTagModalOpen, setIsTagModalOpen] = useState(false) // <-- Стан для модалки тегів
+  const [isTagModalOpen, setIsTagModalOpen] = useState(false)
   const [selectedShift, setSelectedShift] = useState<IShift | null>(null)
   const [isReportModalOpen, setIsReportModalOpen] = useState(false)
 
+  const prevShiftsRef = useRef<IShift[]>([])
+  const [highlightedIds, setHighlightedIds] = useState<number[]>([])
+
   const { mutate: deleteShift } = useDeleteShiftMutation(fetchShifts)
+
+  useEffect(() => {
+    if (shifts) {
+      const prevShifts = prevShiftsRef.current
+      if (prevShifts.length > 0) {
+        const newIds = shifts
+          .filter((s) => !prevShifts.some((ps) => ps.id === s.id))
+          .map((s) => s.id)
+
+        const updatedIds = shifts
+          .filter((s) => {
+            const prev = prevShifts.find((ps) => ps.id === s.id)
+            return prev && prev.updatedAt !== s.updatedAt
+          })
+          .map((s) => s.id)
+
+        const toHighlight = [...newIds, ...updatedIds]
+
+        if (toHighlight.length > 0) {
+          setHighlightedIds((prev) => [...new Set([...prev, ...toHighlight])])
+
+          setTimeout(() => {
+            setHighlightedIds((prev) =>
+              prev.filter((id) => !toHighlight.includes(id))
+            )
+          }, 1500)
+        }
+      }
+      prevShiftsRef.current = shifts
+    }
+  }, [shifts])
 
   useEffect(() => {
     const handleInvalidate = () => fetchShifts()
@@ -231,7 +264,6 @@ const ShiftPage = () => {
       </section>
 
       <div className='bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden'>
-        {/* Шапка таблиці (залишається фіксованою) */}
         <div className='grid grid-cols-[100px_1fr] px-6 py-3 bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider'>
           <div>Дата</div>
           <div
@@ -246,7 +278,6 @@ const ShiftPage = () => {
           </div>
         </div>
 
-        {/* Тіло таблиці зі скролом */}
         <div className='divide-y divide-gray-100 overflow-y-auto max-h-[60vh]'>
           {visibleShifts.length === 0 ? (
             <div className='py-12 flex flex-col items-center justify-center text-gray-400'>
@@ -257,7 +288,11 @@ const ShiftPage = () => {
             visibleShifts.map((item) => (
               <div
                 key={item.id}
-                className='grid grid-cols-[100px_1fr] px-6 py-6 min-h-[80px] text-sm text-gray-800 hover:bg-gray-50 transition-colors cursor-pointer items-center'
+                className={`grid grid-cols-[100px_1fr] px-6 py-6 min-h-[80px] text-sm text-gray-800 cursor-pointer items-center transition-all duration-300 ${
+                  highlightedIds.includes(item.id)
+                    ? 'bg-blue-100 shadow-[inset_0_0_15px_rgba(59,130,246,0.2)] z-10 relative scale-[1.01]'
+                    : 'bg-white hover:bg-gray-50 scale-100'
+                }`}
                 onClick={() => handleOpenEdit(item)}
               >
                 <div className='font-medium text-gray-900 pt-1'>
@@ -375,8 +410,8 @@ const ShiftPage = () => {
           shift={selectedShift}
           departments={departments || []}
           users={users || []}
-          availableTags={allTags || []} // <-- Тепер передаємо ВСІ теги з бази
-          onManageTags={() => setIsTagModalOpen(true)} // <-- Відкриває TagModal
+          availableTags={allTags || []}
+          onManageTags={() => setIsTagModalOpen(true)}
         />
       )}
 

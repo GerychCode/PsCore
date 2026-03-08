@@ -81,10 +81,8 @@ export default function Layout({
     []
   )
 
-  // Виклик винесеного хука
   useWebSockets(handleNewNotification)
 
-  // Обробка кліку поза вікном сповіщень
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (

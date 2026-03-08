@@ -26,6 +26,7 @@ export class WorkShiftService {
     private readonly userService: UserService,
     private eventsGateway: EventsGateway,
   ) {}
+
   async getWorkShifts(user: User, shiftFilterDto: FilterShiftDto) {
     const userIdFilter =
       user.role === Role.Admin ? shiftFilterDto.userId : user.id;
@@ -173,7 +174,7 @@ export class WorkShiftService {
     const status =
       user.role === Role.Admin ? ShiftStatus.APPROVED : ShiftStatus.PENDING;
 
-    const newShift = this.prismaService.workShift.create({
+    const newShift = await this.prismaService.workShift.create({
       data: {
         date: shiftDate.toISOString(),
         startedAt: createWorkShiftDto.startedAt,
@@ -189,7 +190,8 @@ export class WorkShiftService {
     });
 
     const adminIds = await this.userService.getAdmins();
-    this.eventsGateway.emitToUsers(adminIds, 'invalidate_shifts');
+    const usersToNotify = Array.from(new Set([...adminIds, targetUserId]));
+    this.eventsGateway.emitToUsers(usersToNotify, 'invalidate_shifts');
 
     return newShift;
   }
@@ -322,6 +324,10 @@ export class WorkShiftService {
       });
     }
 
+    const adminIds = await this.userService.getAdmins();
+    const usersToNotify = Array.from(new Set([...adminIds, existShift.userId]));
+    this.eventsGateway.emitToUsers(usersToNotify, 'invalidate_shifts');
+
     return updatedShift;
   }
 
@@ -380,10 +386,16 @@ export class WorkShiftService {
       });
     }
 
-    return this.prismaService.workShift.delete({
+    const deletedShift = await this.prismaService.workShift.delete({
       where: {
         id: id,
       },
     });
+
+    const adminIds = await this.userService.getAdmins();
+    const usersToNotify = Array.from(new Set([...adminIds, existEntry.userId]));
+    this.eventsGateway.emitToUsers(usersToNotify, 'invalidate_shifts');
+
+    return deletedShift;
   }
 }
