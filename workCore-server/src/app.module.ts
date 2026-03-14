@@ -10,6 +10,8 @@ import { WorkScheduleModule } from './work.schedule/work.schedule.module';
 import { WorkShiftTagModule } from './work.shift.tag/work.shift.tag.module';
 
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
+import { TelegramModule } from './telegram/telegram.module';
+import { TelegrafModule } from 'nestjs-telegraf';
 
 @Module({
   imports: [
@@ -24,6 +26,10 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
     WorkShiftModule,
     WorkScheduleModule,
     WorkShiftTagModule,
+    TelegrafModule.forRoot({
+      token: process.env.TELEGRAM_BOT_TOKEN,
+    }),
+    TelegramModule,
   ],
   controllers: [],
   providers: [],

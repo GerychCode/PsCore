@@ -2,20 +2,25 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service'; // Перевірте шлях до PrismaService
 import { NotificationType } from '../../generated/prisma';
 import { EventsGateway } from '../events/events.gateway';
+import { TelegramService } from '../telegram/telegram.service';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private eventsGateway: EventsGateway,
+    private readonly telegramService: TelegramService,
   ) {}
 
-  // 1. Створення повідомлення (зберігає в БД і відправляє по сокетах)
   async createNotification(
     userId: number,
     data: { title: string; message: string; type?: NotificationType },
   ) {
-    // Зберігаємо в БД
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { telegramId: true },
+    });
+
     const notification = await this.prisma.notification.create({
       data: {
         userId,
@@ -25,8 +30,20 @@ export class NotificationsService {
       },
     });
 
-    // Відправляємо збережений об'єкт (з ID, isRead та createdAt) користувачу
+    // 3. Відправляємо на фронт через WebSocket
     this.eventsGateway.emitToUser(userId, 'new_notification', notification);
+
+    // 4. Дублюємо в Telegram через наш сервіс
+    if (user?.telegramId) {
+      let icon = 'ℹ️';
+      if (data.type === 'SUCCESS') icon = '✅';
+      if (data.type === 'WARNING') icon = '⚠️';
+      if (data.type === 'ERROR') icon = '❌';
+
+      const tgMessage = `${icon} <b>${data.title}</b>\n\n${data.message}`;
+
+      await this.telegramService.sendMessage(user.telegramId, tgMessage);
+    }
 
     return notification;
   }

@@ -25,6 +25,12 @@ class UserService {
   async generateTelegramCode() {
     return await axiosClassic.post<{ code: string }>(`/user/telegram-code`)
   }
+
+  public async getUserStatistics(id: number, month?: number, year?: number) {
+    return await axiosClassic.get(`/user/${id}/statistics`, {
+      params: { month, year },
+    })
+  }
 }
 
 export const userService = new UserService()

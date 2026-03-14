@@ -182,4 +182,74 @@ export class UserService {
     });
     return admins.map((a) => a.id);
   }
+  public async getUserStatistics(userId: number, month: number, year: number) {
+    const user = await this.prismaService.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) throw new NotFoundException('Користувача не знайдено');
+
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+
+    const shifts = await this.prismaService.workShift.findMany({
+      where: {
+        userId: userId,
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        tags: true,
+      },
+      orderBy: {
+        date: 'asc',
+      },
+    });
+
+    const totalShifts = shifts.length;
+    const totalHours = shifts.reduce(
+      (acc, shift) => acc + (shift.totalHours || 0),
+      0,
+    );
+    const overtimeHours = totalHours > 176 ? totalHours - 176 : 0; //Змінити
+
+    // 1. Дані для графіка годин по днях
+    const dailyHoursMap = new Map<number, number>();
+    shifts.forEach((shift) => {
+      const day = shift.date.getDate();
+      const currentHours = dailyHoursMap.get(day) || 0;
+      dailyHoursMap.set(day, currentHours + (shift.totalHours || 0));
+    });
+
+    const dailyHours = Array.from(dailyHoursMap.entries()).map(
+      ([day, hours]) => ({
+        date: `${day.toString().padStart(2, '0')}.${month.toString().padStart(2, '0')}`,
+        hours: Number(hours.toFixed(2)),
+      }),
+    );
+
+    const tagDistributionMap = new Map<string, number>();
+    shifts.forEach((shift) => {
+      const tagName =
+        shift.tags && shift.tags.length > 0 ? shift.tags[0].name : 'Без тегу';
+      const currentVal = tagDistributionMap.get(tagName) || 0;
+      tagDistributionMap.set(tagName, currentVal + (shift.totalHours || 0));
+    });
+
+    const tagDistribution = Array.from(tagDistributionMap.entries()).map(
+      ([name, value]) => ({
+        name,
+        value: Number(value.toFixed(2)),
+      }),
+    );
+
+    return {
+      totalHours: Number(totalHours.toFixed(2)),
+      totalShifts,
+      overtimeHours: Number(overtimeHours.toFixed(2)),
+      dailyHours,
+      tagDistribution,
+    };
+  }
 }

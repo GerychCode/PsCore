@@ -16,6 +16,7 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  Query,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { Authorized } from '../common/decorator/authorized.decorator';
@@ -53,18 +54,18 @@ export class UserController {
   @Put('avatar')
   @Authorization()
   @UseInterceptors(
-      FileInterceptor('avatar', {
-        limits: { fileSize: 5 * 1024 * 1024, files: 1 },
-      }),
+    FileInterceptor('avatar', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    }),
   )
   uploadFile(
-      @Authorized() user: User,
-      @UploadedFile(
-          new ParseFilePipe({
-            validators: [new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 })],
-          }),
-      )
-      file: Express.Multer.File,
+    @Authorized() user: User,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 })],
+      }),
+    )
+    file: Express.Multer.File,
   ) {
     return this.userService.saveAvatarToDB(user, file);
   }
@@ -78,8 +79,8 @@ export class UserController {
   @Put('update/:id')
   @Authorization(Role.Admin)
   updateUserForAdmin(
-      @Param('id', ParseIntPipe) id: number,
-      @Body() updateUserDto: UpdateUserDtoAdmin,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateUserDto: UpdateUserDtoAdmin,
   ) {
     return this.userService.updateUser(updateUserDto, id);
   }
@@ -93,8 +94,8 @@ export class UserController {
   @Delete('delete/:id')
   @Authorization(Role.Admin)
   deleteUser(
-      @Authorized('id') userId: number,
-      @Param('id') targetUserId: number,
+    @Authorized('id') userId: number,
+    @Param('id') targetUserId: number,
   ) {
     return this.userService.destroyUser(userId, targetUserId);
   }
@@ -103,5 +104,18 @@ export class UserController {
   @Authorization()
   delete(@Authorized('id') id: number, @Body() passwordDto: PasswordDto) {
     return this.userService.destroySelf(id, passwordDto);
+  }
+
+  @Get(':id/statistics')
+  @Authorization()
+  public async getStatistics(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+  ) {
+    const currentMonth = month ? parseInt(month) : new Date().getMonth() + 1;
+    const currentYear = year ? parseInt(year) : new Date().getFullYear();
+
+    return this.userService.getUserStatistics(id, currentMonth, currentYear);
   }
 }
