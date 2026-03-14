@@ -11,11 +11,9 @@ COPY package*.json ./
 
 # Встановлюємо залежності проекту
 RUN npm install --legacy-peer-deps
-#
-# Копіюємо решту файлів проекту (ВИПРАВЛЕНО ТУТ)
+
 COPY . .
 
-# Генеруємо Prisma клієнт
 RUN npx prisma generate
 
 # Відкриваємо порт
