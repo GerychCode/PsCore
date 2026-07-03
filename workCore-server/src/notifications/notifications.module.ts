@@ -3,14 +3,16 @@ import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UserModule } from '../user/user.module';
-import { EventsGateway } from '../events/events.gateway';
+import { EventsModule } from '../events/events.module';
 import { TelegramModule } from '../telegram/telegram.module';
 
 @Global()
 @Module({
-  imports: [PrismaModule, UserModule, EventsGateway, TelegramModule],
+  // EventsGateway береться з EventsModule — окремий інстанс у providers
+  // створював би другу мапу сокетів, і сповіщення губилися б
+  imports: [PrismaModule, UserModule, EventsModule, TelegramModule],
   controllers: [NotificationsController],
-  providers: [EventsGateway, NotificationsService],
+  providers: [NotificationsService],
   exports: [NotificationsService],
 })
 export class NotificationsModule {}

@@ -27,6 +27,7 @@
     "@nestjs/mapped-types": "*",
     "@nestjs/platform-express": "^10.4.19",
     "@nestjs/platform-socket.io": "^10.4.22",
+    "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^10.4.22",
     "@prisma/client": "^6.9.0",
     "bcrypt": "^6.0.0",
@@ -62,6 +63,7 @@
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.0",
     "jest": "^29.5.0",
+    "jest-util": "^29.7.0",
     "prettier": "^3.0.0",
     "prisma": "^6.9.0",
     "source-map-support": "^0.5.21",
@@ -83,10 +85,30 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^generated/(.*)$": "<rootDir>/../generated/$1"
+    },
+    "transformIgnorePatterns": [
+      "/node_modules/",
+      "/generated/"
+    ],
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.(t|j)s",
+      "!**/*.spec.ts",
+      "!**/*.module.ts",
+      "!**/*.d.ts",
+      "!**/dto/**",
+      "!main.ts"
     ],
     "coverageDirectory": "../coverage",
+    "coverageThreshold": {
+      "global": {
+        "branches": 100,
+        "functions": 100,
+        "lines": 100,
+        "statements": 100
+      }
+    },
     "testEnvironment": "node"
   }
 }

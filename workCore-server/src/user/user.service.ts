@@ -104,7 +104,7 @@ export class UserService {
       throw new BadRequestException('Ви не обновили жодної строки!');
 
     const userData = user ? user : await this.findById(id);
-    if (!user) {
+    if (!userData) {
       throw new NotFoundException(`Користувача не знайдено`);
     }
 
@@ -122,7 +122,7 @@ export class UserService {
     const updatedUser = await this.prismaService.user.update({
       where: { id: userData.id },
       data: {
-        ...updateUserDto,
+        ...changedData,
       },
     });
 
@@ -212,9 +212,8 @@ export class UserService {
       (acc, shift) => acc + (shift.totalHours || 0),
       0,
     );
-    const overtimeHours = totalHours > 176 ? totalHours - 176 : 0; //Змінити
+    const overtimeHours = totalHours > 176 ? totalHours - 176 : 0;
 
-    // 1. Дані для графіка годин по днях
     const dailyHoursMap = new Map<number, number>();
     shifts.forEach((shift) => {
       const day = shift.date.getDate();

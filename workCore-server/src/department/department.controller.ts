@@ -14,6 +14,7 @@ import { DepartmentService } from './department.service';
 import { CreateDepartmentDto } from './dto/create.department.dto';
 import { Authorization } from '../common/decorator/auth.decorator';
 import { UpdateDepartmentDto } from './dto/update.department.dto';
+import { Role } from '../../generated/prisma';
 
 @Controller('department')
 export class DepartmentController {
@@ -48,7 +49,7 @@ export class DepartmentController {
   }
 
   @Post('')
-  @Authorization('Admin')
+  @Authorization(Role.Admin)
   async createDepartment(@Body() departmentDto: CreateDepartmentDto) {
     try {
       return await this.departmentService.createDepartment(departmentDto);
@@ -61,7 +62,7 @@ export class DepartmentController {
   }
 
   @Put(':departmentId')
-  @Authorization('Admin')
+  @Authorization(Role.Admin)
   async updateDepartment(
       @Param('departmentId', ParseIntPipe) departmentId: number,
       @Body() departmentDto: UpdateDepartmentDto,
@@ -80,7 +81,7 @@ export class DepartmentController {
   }
 
   @Delete(':departmentId')
-  @Authorization('Admin')
+  @Authorization(Role.Admin)
   async deleteDepartment(
       @Param('departmentId', ParseIntPipe) departmentId: number,
   ) {

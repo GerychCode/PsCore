@@ -8,10 +8,13 @@ import { DepartmentModule } from './department/department.module';
 import { WorkShiftModule } from './work.shift/work.shift.module';
 import { WorkScheduleModule } from './work.schedule/work.schedule.module';
 import { WorkShiftTagModule } from './work.shift.tag/work.shift.tag.module';
+import { EmployeeLevelModule } from './employee.level/employee.level.module';
 
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { TelegramModule } from './telegram/telegram.module';
 import { TelegrafModule } from 'nestjs-telegraf';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -19,6 +22,13 @@ import { TelegrafModule } from 'nestjs-telegraf';
       isGlobal: true,
       ignoreEnvFile: !IsDevEnv,
     }),
+    // Загальний ліміт: 100 запитів за хвилину з однієї IP-адреси
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
     PrismaModule,
     AuthModule,
     UserModule,
@@ -26,13 +36,19 @@ import { TelegrafModule } from 'nestjs-telegraf';
     WorkShiftModule,
     WorkScheduleModule,
     WorkShiftTagModule,
+    EmployeeLevelModule,
     TelegrafModule.forRoot({
       token: process.env.TELEGRAM_BOT_TOKEN,
     }),
     TelegramModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

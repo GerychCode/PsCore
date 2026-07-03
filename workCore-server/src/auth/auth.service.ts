@@ -48,9 +48,9 @@ export class AuthService {
         if(err){
          return reject( new InternalServerErrorException("Не вдалося завершити сесію!"))
         }
+        res.clearCookie(this.configService.getOrThrow<string>('SESSION_NAME'))
+        resolve()
       })
-      res.clearCookie(this.configService.getOrThrow<string>('SESSION_NAME'))
-      resolve()
     })
   }
 

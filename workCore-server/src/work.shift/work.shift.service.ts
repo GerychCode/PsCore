@@ -8,14 +8,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkShiftDto } from './dto/create.work.shift.dto';
 import { endOfDay, parse, parseISO, startOfDay } from 'date-fns';
 import { DepartmentService } from '../department/department.service';
-import { $Enums, WorkShift, Role, User } from '../../generated/prisma';
+import { $Enums, Role, User } from '../../generated/prisma';
 import ShiftStatus = $Enums.ShiftStatus;
 import NotificationType = $Enums.NotificationType;
 import { UpdateWorkShiftDto } from './dto/update.work.shift.dto.ts';
 import { FilterShiftDto } from './dto/shift.filter.dto';
 import { NotificationsService } from '../notifications/notifications.service';
-import { UserService } from '../user/user.service';
-import { EventsGateway } from '../events/events.gateway';
+import { ShiftSessionService } from './shift.session.service';
 
 @Injectable()
 export class WorkShiftService {
@@ -23,8 +22,7 @@ export class WorkShiftService {
     private notificationsService: NotificationsService,
     private prismaService: PrismaService,
     private departmentService: DepartmentService,
-    private readonly userService: UserService,
-    private eventsGateway: EventsGateway,
+    private readonly shiftSessionService: ShiftSessionService,
   ) {}
 
   async getWorkShifts(user: User, shiftFilterDto: FilterShiftDto) {
@@ -103,16 +101,6 @@ export class WorkShiftService {
     return shift;
   }
 
-  private async getSystemTag(name: string, severity: number) {
-    let tag = await this.prismaService.tag.findUnique({ where: { name } });
-    if (!tag) {
-      tag = await this.prismaService.tag.create({
-        data: { name, severity },
-      });
-    }
-    return tag;
-  }
-
   async createWorkShift(user: User, createWorkShiftDto: CreateWorkShiftDto) {
     let targetUserId = user.id;
     if (user.role === Role.Admin && createWorkShiftDto.userId) {
@@ -142,9 +130,7 @@ export class WorkShiftService {
         'Ви не можете закінчити робочий день до його початку!',
       );
 
-    this.validateWorkShift(dayShifts, startedAt, endAt, department.id);
-
-    const tagsToConnect = [];
+    this.shiftSessionService.validateNoOverlap(dayShifts, startedAt, endAt);
 
     const schedule = await this.prismaService.workSchedule.findFirst({
       where: {
@@ -156,20 +142,10 @@ export class WorkShiftService {
       },
     });
 
-    if (!schedule) {
-      const tag = await this.getSystemTag('Поза графіком', 2);
-      tagsToConnect.push({ id: tag.id });
-    } else {
-      if (schedule.isDayOff) {
-        const tag = await this.getSystemTag('У вихідний', 2);
-        tagsToConnect.push({ id: tag.id });
-      } else {
-        if (createWorkShiftDto.startedAt > schedule.startedAt) {
-          const tag = await this.getSystemTag('Запізнення', 2);
-          tagsToConnect.push({ id: tag.id });
-        }
-      }
-    }
+    const tagsToConnect = await this.shiftSessionService.resolveScheduleTags(
+      schedule,
+      createWorkShiftDto.startedAt,
+    );
 
     const status =
       user.role === Role.Admin ? ShiftStatus.APPROVED : ShiftStatus.PENDING;
@@ -189,9 +165,7 @@ export class WorkShiftService {
       },
     });
 
-    const adminIds = await this.userService.getAdmins();
-    const usersToNotify = Array.from(new Set([...adminIds, targetUserId]));
-    this.eventsGateway.emitToUsers(usersToNotify, 'invalidate_shifts');
+    await this.shiftSessionService.notifyShiftChanged(targetUserId);
 
     return newShift;
   }
@@ -264,8 +238,6 @@ export class WorkShiftService {
 
     const startedAtStr = updateWorkShiftDto.startedAt ?? existShift.startedAt;
     const endTimeStr = updateWorkShiftDto.endTime ?? existShift.endTime;
-    const departmentId =
-      updateWorkShiftDto.departmentId ?? existShift.departmentId;
 
     const startedAt = parse(startedAtStr, 'HH:mm', shiftDate);
     const endAt = parse(endTimeStr, 'HH:mm', shiftDate);
@@ -276,7 +248,7 @@ export class WorkShiftService {
       );
     }
 
-    this.validateWorkShift(dayShifts, startedAt, endAt, departmentId, id);
+    this.shiftSessionService.validateNoOverlap(dayShifts, startedAt, endAt, id);
 
     const updatedShift = await this.prismaService.workShift.update({
       where: { id },
@@ -324,42 +296,9 @@ export class WorkShiftService {
       });
     }
 
-    const adminIds = await this.userService.getAdmins();
-    const usersToNotify = Array.from(new Set([...adminIds, existShift.userId]));
-    this.eventsGateway.emitToUsers(usersToNotify, 'invalidate_shifts');
+    await this.shiftSessionService.notifyShiftChanged(existShift.userId);
 
     return updatedShift;
-  }
-
-  private validateWorkShift(
-    dayShifts: WorkShift[],
-    startedAt: Date,
-    endAt: Date,
-    departmentId: number,
-    shiftId?: number,
-  ) {
-    dayShifts.forEach((day) => {
-      const dayDate = day.date;
-      const [startHour, startMinute] = day.startedAt.split(':').map(Number);
-      const [endHour, endMinute] = day.endTime.split(':').map(Number);
-
-      const existingStart = new Date(dayDate);
-      existingStart.setHours(startHour, startMinute, 0, 0);
-
-      const existingEnd = new Date(dayDate);
-      existingEnd.setHours(endHour, endMinute, 0, 0);
-
-      const isOverlapping =
-        (startedAt >= existingStart && startedAt < existingEnd) ||
-        (endAt > existingStart && endAt <= existingEnd) ||
-        (startedAt <= existingStart && endAt >= existingEnd);
-
-      if (isOverlapping && shiftId !== day.id) {
-        throw new BadRequestException(
-          'Нова зміна перетинається з існуючою зміною!',
-        );
-      }
-    });
   }
 
   async deleteShift(user: User, id: number) {
@@ -392,9 +331,7 @@ export class WorkShiftService {
       },
     });
 
-    const adminIds = await this.userService.getAdmins();
-    const usersToNotify = Array.from(new Set([...adminIds, existEntry.userId]));
-    this.eventsGateway.emitToUsers(usersToNotify, 'invalidate_shifts');
+    await this.shiftSessionService.notifyShiftChanged(existEntry.userId);
 
     return deletedShift;
   }

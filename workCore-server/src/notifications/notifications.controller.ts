@@ -16,7 +16,6 @@ import { Authorization } from '../common/decorator/auth.decorator';
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  @Authorization()
   private getUserId(req: Request): number {
     const userId = req.session?.userId;
     if (!userId) throw new UnauthorizedException('User not authorized');

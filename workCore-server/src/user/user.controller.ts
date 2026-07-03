@@ -40,8 +40,17 @@ export class UserController {
 
   @Get('list/:id')
   @Authorization()
-  public async getUserById(@Param('id', ParseIntPipe) userId: number) {
-    return this.userService.findById(userId);
+  public async getUserById(
+    @Authorized() requester: User,
+    @Param('id', ParseIntPipe) userId: number,
+  ) {
+    const user = await this.userService.findById(userId);
+    // Чутливі поля бачить лише власник профілю або адмін
+    if (requester.role !== Role.Admin && requester.id !== userId) {
+      const { phone, address, dateOfBirth, ...publicUser } = user;
+      return publicUser;
+    }
+    return user;
   }
 
   @Post('telegram-code')
@@ -62,7 +71,10 @@ export class UserController {
     @Authorized() user: User,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 })],
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
+          new FileTypeValidator({ fileType: /^image\/(jpeg|png|webp|gif)$/ }),
+        ],
       }),
     )
     file: Express.Multer.File,
@@ -95,7 +107,7 @@ export class UserController {
   @Authorization(Role.Admin)
   deleteUser(
     @Authorized('id') userId: number,
-    @Param('id') targetUserId: number,
+    @Param('id', ParseIntPipe) targetUserId: number,
   ) {
     return this.userService.destroyUser(userId, targetUserId);
   }
@@ -113,8 +125,15 @@ export class UserController {
     @Query('month') month?: string,
     @Query('year') year?: string,
   ) {
-    const currentMonth = month ? parseInt(month) : new Date().getMonth() + 1;
-    const currentYear = year ? parseInt(year) : new Date().getFullYear();
+    const parsedMonth = parseInt(month ?? '', 10);
+    const parsedYear = parseInt(year ?? '', 10);
+    const currentMonth =
+      !isNaN(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12
+        ? parsedMonth
+        : new Date().getMonth() + 1;
+    const currentYear = !isNaN(parsedYear)
+      ? parsedYear
+      : new Date().getFullYear();
 
     return this.userService.getUserStatistics(id, currentMonth, currentYear);
   }
