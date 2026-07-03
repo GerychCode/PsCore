@@ -6,7 +6,6 @@ export default function middleware(request: NextRequest) {
   const { url, headers, cookies } = request
   const isWipPage = url.includes('/wip')
 
-  // --- 1. Логіка визначення пристрою та перевірки доступу ---
   const userAgent = headers.get('user-agent') || ''
   let deviceType: 'pc' | 'tablet' | 'mobile' = 'pc'
 
@@ -57,7 +56,6 @@ export default function middleware(request: NextRequest) {
   return NextResponse.next()
 }
 
-// Оновлюємо matcher, щоб включити всі захищені сторінки та /wip
 export const config = {
   matcher: [
     '/dashboard/:path*',
@@ -65,6 +63,7 @@ export const config = {
     '/profile/:path*',
     '/schedule/:path*',
     '/departments/:path*',
+    '/chat/:path*',
     '/auth/:path*',
     '/wip',
   ],

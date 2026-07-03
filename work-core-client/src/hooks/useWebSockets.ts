@@ -12,11 +12,11 @@ export const useWebSockets = (
   useEffect(() => {
     if (!user?.id) return
 
+    // Автентифікація сокета відбувається за session-кукі (withCredentials)
     const socketInstance: Socket = io(
       process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3022',
       {
         withCredentials: true,
-        query: { userId: user.id },
       }
     )
 

@@ -15,6 +15,7 @@ import { TelegramModule } from './telegram/telegram.module';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { APP_GUARD } from '@nestjs/core';
       token: process.env.TELEGRAM_BOT_TOKEN,
     }),
     TelegramModule,
+    ChatModule,
   ],
   controllers: [],
   providers: [

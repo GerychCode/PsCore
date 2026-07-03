@@ -25,6 +25,8 @@ model User {
   workShift    WorkShift[]
   workSchedule WorkSchedule[]
   notifications Notification[]
+  sentMessages     ChatMessage[] @relation("SentMessages")
+  receivedMessages ChatMessage[] @relation("ReceivedMessages")
 }
 
 enum Role {
@@ -136,4 +138,20 @@ model Notification {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+model ChatMessage {
+  id         Int      @id @default(autoincrement())
+  senderId   Int      @map("sender_id")
+  receiverId Int      @map("receiver_id")
+  content    String
+  isRead     Boolean  @default(false) @map("is_read")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId, id])
+  @@index([receiverId, isRead])
+  @@map("chat_messages")
 }

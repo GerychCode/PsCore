@@ -4,6 +4,7 @@ import { LuLayoutDashboard } from 'react-icons/lu'
 import { CgProfile } from 'react-icons/cg'
 import {FaRegCalendarAlt} from "react-icons/fa";
 import { HiOutlineOfficeBuilding } from "react-icons/hi";
+import { IoChatbubblesOutline } from "react-icons/io5";
 
 interface ISidebarMenu {
   title: string
@@ -35,5 +36,10 @@ export const sidebarMenuConfig: ISidebarMenu[] = [
     title: 'Відділення',
     icon: HiOutlineOfficeBuilding,
     path: '/departments',
+  },
+  {
+    title: 'Чат',
+    icon: IoChatbubblesOutline,
+    path: '/chat',
   },
 ]
