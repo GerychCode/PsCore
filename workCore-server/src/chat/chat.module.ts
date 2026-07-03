@@ -4,9 +4,11 @@ import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
-  imports: [PrismaModule, EventsModule],
+  // UserModule потрібен AuthGuard-у (@Authorization) в контролері
+  imports: [PrismaModule, EventsModule, UserModule],
   controllers: [ChatController],
   providers: [ChatService, ChatGateway],
 })
