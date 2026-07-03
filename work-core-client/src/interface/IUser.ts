@@ -5,6 +5,7 @@ export interface IUser {
   lastName: string
   email: string
   role: 'Admin' | 'Manager' | 'Employe'
+  baseLevel?: number
   dateOfBirth?: string
   phone?: string
   address?: string

@@ -41,6 +41,7 @@ export class UserService {
         phone: true,
         address: true,
         role: true,
+        baseLevel: true,
         dateOfBirth: true,
         createdAt: true,
         updatedAt: true,

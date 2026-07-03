@@ -18,6 +18,13 @@ class UserService {
     return await axiosClassic.put(`/user`, data)
   }
 
+  public async updateUserAdmin(
+    id: number,
+    data: Partial<IUserUpdate> & { baseLevel?: number }
+  ) {
+    return await axiosClassic.put(`/user/update/${id}`, data)
+  }
+
   async updateUserAvatar(data: FormData) {
     return await axiosFormData.put(`/user/avatar`, data)
   }

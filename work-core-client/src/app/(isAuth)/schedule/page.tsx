@@ -24,6 +24,27 @@ import { FiChevronLeft, FiChevronRight, FiPlus } from 'react-icons/fi'
 import { FaLock, FaLockOpen } from 'react-icons/fa'
 import { toast } from 'sonner'
 
+const shiftDurationHours = (start: string, end: string) => {
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  return Math.round((eh * 60 + em - (sh * 60 + sm)) / 6) / 10
+}
+
+// Колір блоку залежить від часу початку зміни
+const shiftPalette = (start: string) => {
+  const hour = parseInt(start, 10)
+  if (hour < 12) return 'bg-amber-50 text-amber-700 border-amber-400'
+  if (hour < 16) return 'bg-sky-50 text-sky-700 border-sky-400'
+  return 'bg-violet-50 text-violet-700 border-violet-400'
+}
+
+const legendItems = [
+  { label: 'Ранкова', className: 'bg-amber-400' },
+  { label: 'Денна', className: 'bg-sky-400' },
+  { label: 'Вечірня', className: 'bg-violet-400' },
+  { label: 'Вихідний', className: 'bg-gray-300' },
+]
+
 export default function Page() {
   const user = userStore((state) => state.user)
   const isAdmin = userStore((state) => state.isAdmin)
@@ -185,6 +206,17 @@ export default function Page() {
             {format(weekStart, 'd MMMM', { locale: uk })} -{' '}
             {format(weekEnd, 'd MMMM yyyy', { locale: uk })}
           </h2>
+          <div className='hidden lg:flex items-center gap-4'>
+            {legendItems.map((item) => (
+              <span
+                key={item.label}
+                className='flex items-center gap-1.5 text-xs text-gray-500'
+              >
+                <span className={`h-2.5 w-2.5 rounded-full ${item.className}`} />
+                {item.label}
+              </span>
+            ))}
+          </div>
           <div className='flex gap-2'>
             <button
               onClick={goToPreviousWeek}
@@ -304,16 +336,12 @@ export default function Page() {
                         return (
                           <td
                             key={day.toISOString()}
-                            className={`p-4 font-semibold border-b border-gray-200 transition-colors ${
+                            className={`p-2 border-b border-gray-200 transition-colors ${
                               isToday(day) ? 'bg-primary/5' : ''
                             } ${
                               canEditCell
                                 ? 'cursor-pointer hover:bg-primary/10 rounded-md'
                                 : 'cursor-not-allowed opacity-70'
-                            } ${
-                              schedule?.isDayOff
-                                ? 'text-gray-400 font-normal'
-                                : 'text-gray-800'
                             }`}
                             onClick={() =>
                               handleCellClick(
@@ -327,12 +355,29 @@ export default function Page() {
                           >
                             {schedule ? (
                               schedule.isDayOff ? (
-                                'Вихідний'
+                                <div className='mx-auto w-full max-w-[120px] rounded-lg border-l-4 border-gray-300 bg-gray-100 px-2 py-2 text-xs font-medium text-gray-400'>
+                                  🌙 Вихідний
+                                </div>
                               ) : (
-                                `${schedule.startedAt} - ${schedule.endTime}`
+                                <div
+                                  className={`mx-auto w-full max-w-[120px] rounded-lg border-l-4 px-2 py-2 ${shiftPalette(schedule.startedAt)}`}
+                                >
+                                  <div className='text-xs font-bold whitespace-nowrap'>
+                                    {schedule.startedAt}–{schedule.endTime}
+                                  </div>
+                                  <div className='text-[10px] opacity-70'>
+                                    {shiftDurationHours(
+                                      schedule.startedAt,
+                                      schedule.endTime
+                                    )}{' '}
+                                    год
+                                  </div>
+                                </div>
                               )
                             ) : (
-                              <span className='text-gray-400'>-</span>
+                              <span className='text-gray-300 font-semibold'>
+                                —
+                              </span>
                             )}
                           </td>
                         )

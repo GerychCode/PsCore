@@ -34,9 +34,12 @@ describe('ChatService', () => {
   describe('sendMessage', () => {
     it('зберігає повідомлення і сповіщає обох', async () => {
       const message = await service.sendMessage(1, 2, '  Привіт  ');
-      expect(prisma.chatMessage.create).toHaveBeenCalledWith({
-        data: { senderId: 1, receiverId: 2, content: 'Привіт' },
-      });
+      expect(prisma.chatMessage.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { senderId: 1, receiverId: 2, content: 'Привіт' },
+          include: expect.objectContaining({ sender: expect.anything() }),
+        }),
+      );
       expect(events.emitToUser).toHaveBeenCalledWith(
         2,
         'chat:message',

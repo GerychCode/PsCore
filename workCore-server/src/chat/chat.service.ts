@@ -46,6 +46,12 @@ export class ChatService {
         receiverId,
         content: trimmed,
       },
+      include: {
+        // Ім'я відправника потрібне клієнту для спливаючого сповіщення
+        sender: {
+          select: { id: true, firstName: true, lastName: true, avatar: true },
+        },
+      },
     });
 
     // Отримувачу — нове повідомлення; відправнику — синхронізація інших вкладок

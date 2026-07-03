@@ -5,6 +5,7 @@ export interface IChatMessage {
   content: string
   isRead: boolean
   createdAt: string
+  sender?: IChatPartner
 }
 
 export interface IChatPartner {

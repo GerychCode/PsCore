@@ -1,12 +1,15 @@
 import {
     IsEmail,
     IsEnum,
+    IsInt,
     IsNotEmpty,
     IsOptional,
     IsString,
     Length,
     Matches,
+    Max,
     MaxLength,
+    Min,
     MinLength,
     IsDateString, IsDate,
 } from 'class-validator';
@@ -55,4 +58,10 @@ export class UpdateUserDtoAdmin extends UpdateUserDto {
     })
     @IsOptional()
     role?: Role;
+
+    @IsOptional()
+    @IsInt({ message: 'Базовий рівень має бути цілим числом.' })
+    @Min(1, { message: 'Базовий рівень не може бути меншим за 1.' })
+    @Max(10, { message: 'Базовий рівень не може перевищувати 10.' })
+    baseLevel?: number;
 }

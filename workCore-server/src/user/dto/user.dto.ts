@@ -10,6 +10,7 @@ export class UserDto {
   @Expose() avatar: string;
   @Expose() dateOfBirth: Date;
   @Expose() role: string;
+  @Expose() baseLevel: number;
 
   @Exclude()
   passwordHash: string;
