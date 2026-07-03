@@ -48,6 +48,23 @@ export class DepartmentService {
     }
   }
 
+  private validateStaffing(staffing?: Record<string, number>) {
+    if (!staffing) return;
+    for (const [weekday, count] of Object.entries(staffing)) {
+      const day = Number(weekday);
+      if (!Number.isInteger(day) || day < 1 || day > 7) {
+        throw new BadRequestException(
+            'Ключі штату мають бути днями тижня від 1 (Пн) до 7 (Нд).',
+        );
+      }
+      if (!Number.isInteger(count) || count < 0 || count > 50) {
+        throw new BadRequestException(
+            'Штат на день має бути цілим числом від 0 до 50.',
+        );
+      }
+    }
+  }
+
   async createDepartment(departmentDto: CreateDepartmentDto) {
     await this.checkNameUnique(departmentDto.name);
 
@@ -59,6 +76,7 @@ export class DepartmentService {
         departmentDto.weekendsOpeningTime,
         departmentDto.weekendsClosingTime,
     );
+    this.validateStaffing(departmentDto.staffingByWeekday);
 
     return this.prismaService.department.create({
       data: { ...departmentDto },
@@ -77,6 +95,8 @@ export class DepartmentService {
     if (updateDepartmentDto.name) {
       await this.checkNameUnique(updateDepartmentDto.name, id);
     }
+
+    this.validateStaffing(updateDepartmentDto.staffingByWeekday);
 
     const weekdaysOpeningTime =
         updateDepartmentDto.weekdaysOpeningTime ||
@@ -112,6 +132,45 @@ export class DepartmentService {
       where: { id },
       data: changedData,
     });
+  }
+
+  async getMembers(departmentId: number) {
+    await this.getDepartmentById(departmentId);
+    return this.prismaService.user.findMany({
+      where: { departments: { some: { id: departmentId } } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatar: true,
+        role: true,
+      },
+    });
+  }
+
+  async setMembers(departmentId: number, userIds: number[]) {
+    await this.getDepartmentById(departmentId);
+
+    const uniqueIds = Array.from(new Set(userIds));
+    if (uniqueIds.length > 0) {
+      const existing = await this.prismaService.user.count({
+        where: { id: { in: uniqueIds } },
+      });
+      if (existing !== uniqueIds.length) {
+        throw new BadRequestException(
+            'Серед переданих ID є неіснуючі користувачі.',
+        );
+      }
+    }
+
+    await this.prismaService.department.update({
+      where: { id: departmentId },
+      data: {
+        members: { set: uniqueIds.map((id) => ({ id })) },
+      },
+    });
+
+    return this.getMembers(departmentId);
   }
 
   async deleteDepartment(id: number) {

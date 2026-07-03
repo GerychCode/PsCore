@@ -2,6 +2,7 @@ import {
   IsBoolean,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Matches,
@@ -47,4 +48,9 @@ export class CreateDepartmentDto {
   @IsBoolean()
   @IsOptional()
   isActive: boolean;
+
+  // Потрібний штат по днях тижня: { "1": 3, ... "7": 2 } (1=Пн, 7=Нд)
+  @IsOptional()
+  @IsObject({ message: 'Штат має бути обʼєктом днів тижня.' })
+  staffingByWeekday?: Record<string, number>;
 }

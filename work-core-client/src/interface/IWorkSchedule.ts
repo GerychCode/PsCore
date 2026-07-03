@@ -4,6 +4,25 @@ export interface IWorkSchedule {
   startedAt: string
   endTime: string
   isDayOff: boolean
+  isDraft?: boolean
+}
+
+export interface IGenerateWarning {
+  weekday: number
+  type: 'UNDERSTAFFED' | 'WISH_VIOLATED'
+  message: string
+  userId?: number
+}
+
+export interface IGenerateResult {
+  created: number
+  warnings: IGenerateWarning[]
+}
+
+export interface IScheduleWish {
+  id: number
+  userId: number
+  date: string
 }
 
 export interface IEmployeeSchedule {

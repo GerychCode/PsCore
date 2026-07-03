@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { WorkScheduleService } from './work.schedule.service';
+import { ScheduleGeneratorService } from './schedule.generator.service';
 import { Authorization } from '../common/decorator/auth.decorator';
 import { Authorized } from '../common/decorator/authorized.decorator';
 import { CreateWorkScheduleDto } from './dto/create-work-schedule.dto';
@@ -18,10 +19,14 @@ import { FilterWorkScheduleDto } from './dto/filter-work-schedule.dto';
 import { Role, User } from '../../generated/prisma';
 import { WeekViewQueryDto } from './dto/week-view-query.dto';
 import { LockWeekDto } from './dto/lock-week.dto';
+import { GenerateWeekDto } from './dto/generate-week.dto';
 
 @Controller('work-schedule')
 export class WorkScheduleController {
-  constructor(private readonly workScheduleService: WorkScheduleService) {}
+  constructor(
+    private readonly workScheduleService: WorkScheduleService,
+    private readonly scheduleGeneratorService: ScheduleGeneratorService,
+  ) {}
 
   @Get()
   @Authorization()
@@ -31,8 +36,35 @@ export class WorkScheduleController {
 
   @Get('week-view')
   @Authorization()
-  getWeekView(@Query() query: WeekViewQueryDto) {
-    return this.workScheduleService.getWeekView(query.date);
+  getWeekView(@Authorized() user: User, @Query() query: WeekViewQueryDto) {
+    return this.workScheduleService.getWeekView(
+      query.date,
+      user.role === Role.Admin,
+    );
+  }
+
+  @Post('generate')
+  @Authorization(Role.Admin)
+  generateWeek(@Body() dto: GenerateWeekDto) {
+    return this.scheduleGeneratorService.generateWeek(
+      dto.departmentId,
+      dto.date,
+    );
+  }
+
+  @Post('generate/publish')
+  @Authorization(Role.Admin)
+  publishWeek(@Body() dto: GenerateWeekDto) {
+    return this.scheduleGeneratorService.publishWeek(
+      dto.departmentId,
+      dto.date,
+    );
+  }
+
+  @Post('generate/reject')
+  @Authorization(Role.Admin)
+  rejectWeek(@Body() dto: GenerateWeekDto) {
+    return this.scheduleGeneratorService.rejectWeek(dto.departmentId, dto.date);
   }
 
   @Get(':id')

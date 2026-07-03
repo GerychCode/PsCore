@@ -214,7 +214,7 @@ export class WorkScheduleService {
     return deletedSchedule;
   }
 
-  async getWeekView(date: string) {
+  async getWeekView(date: string, isAdmin = false) {
     const targetDate = new Date(date);
     const weekStart = startOfWeek(targetDate, { weekStartsOn: 1 });
     const weekEnd = endOfWeek(targetDate, { weekStartsOn: 1 });
@@ -232,6 +232,8 @@ export class WorkScheduleService {
             gte: weekStart,
             lte: weekEnd,
           },
+          // Чернетки бачить лише адмін до публікації
+          ...(isAdmin ? {} : { isDraft: false }),
         },
       }),
       this.prismaService.workScheduleLock.findMany({
@@ -268,6 +270,7 @@ export class WorkScheduleService {
               startedAt: schedule.startedAt,
               endTime: schedule.endTime,
               isDayOff: schedule.isDayOff,
+              isDraft: schedule.isDraft,
             };
           }
           return null;

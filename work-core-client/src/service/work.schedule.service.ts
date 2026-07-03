@@ -3,12 +3,34 @@ import {
   IWorkScheduleCreate,
   IWorkScheduleUpdate,
   ILockWeek,
+  IGenerateResult,
 } from '@/interface/IWorkSchedule'
 
 class WorkScheduleService {
   public async getWeekView(date: string) {
     return await axiosClassic.get(`/work-schedule/week-view`, {
       params: { date },
+    })
+  }
+
+  public async generateWeek(departmentId: number, date: string) {
+    return await axiosClassic.post<IGenerateResult>(
+      `/work-schedule/generate`,
+      { departmentId, date }
+    )
+  }
+
+  public async publishGeneratedWeek(departmentId: number, date: string) {
+    return await axiosClassic.post(`/work-schedule/generate/publish`, {
+      departmentId,
+      date,
+    })
+  }
+
+  public async rejectGeneratedWeek(departmentId: number, date: string) {
+    return await axiosClassic.post(`/work-schedule/generate/reject`, {
+      departmentId,
+      date,
     })
   }
 

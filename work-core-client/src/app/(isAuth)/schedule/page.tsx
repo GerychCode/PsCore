@@ -21,8 +21,10 @@ import {
 import { userStore } from '@/store/user.store'
 import ScheduleModal from '@/app/(isAuth)/schedule/Schedule.Modal'
 import { FiChevronLeft, FiChevronRight, FiPlus } from 'react-icons/fi'
-import { FaLock, FaLockOpen } from 'react-icons/fa'
+import { FaLock, FaLockOpen, FaMagic, FaCheck, FaTimes } from 'react-icons/fa'
 import { toast } from 'sonner'
+import { workScheduleService } from '@/service/work.schedule.service'
+import { scheduleWishService } from '@/service/schedule.wish.service'
 
 const shiftDurationHours = (start: string, end: string) => {
   const [sh, sm] = start.split(':').map(Number)
@@ -205,6 +207,119 @@ export default function Page() {
     setCurrentDate((prev) => addDays(prev, 7))
   }, [])
 
+  const weekDateParam = format(weekStart, 'yyyy-MM-dd')
+  const [busyDeptId, setBusyDeptId] = useState<number | null>(null)
+
+  const handleGenerate = useCallback(
+    async (departmentId: number) => {
+      setBusyDeptId(departmentId)
+      try {
+        const { data } = await workScheduleService.generateWeek(
+          departmentId,
+          weekDateParam
+        )
+        if (data.created === 0) {
+          toast.warning('Не вдалося призначити жодної зміни.')
+        } else {
+          toast.success(`Згенеровано чернетку: ${data.created} змін.`)
+        }
+        data.warnings.forEach((w) => toast.warning(w.message))
+        getWeekView()
+      } catch (error: any) {
+        toast.error(
+          error?.response?.data?.errors?.[0]?.message ??
+            error?.response?.data?.message ??
+            'Не вдалося згенерувати графік.'
+        )
+      } finally {
+        setBusyDeptId(null)
+      }
+    },
+    [weekDateParam, getWeekView]
+  )
+
+  const handlePublish = useCallback(
+    async (departmentId: number) => {
+      setBusyDeptId(departmentId)
+      try {
+        await workScheduleService.publishGeneratedWeek(
+          departmentId,
+          weekDateParam
+        )
+        toast.success('Графік опубліковано.')
+        getWeekView()
+      } catch {
+        toast.error('Не вдалося опублікувати графік.')
+      } finally {
+        setBusyDeptId(null)
+      }
+    },
+    [weekDateParam, getWeekView]
+  )
+
+  const handleReject = useCallback(
+    async (departmentId: number) => {
+      setBusyDeptId(departmentId)
+      try {
+        await workScheduleService.rejectGeneratedWeek(
+          departmentId,
+          weekDateParam
+        )
+        toast.success('Чернетку відхилено.')
+        getWeekView()
+      } catch {
+        toast.error('Не вдалося відхилити чернетку.')
+      } finally {
+        setBusyDeptId(null)
+      }
+    },
+    [weekDateParam, getWeekView]
+  )
+
+  // Побажання по вихідних (власні) на поточний тиждень
+  const [wishDates, setWishDates] = useState<Set<string>>(new Set())
+
+  const loadWishes = useCallback(async () => {
+    if (!user) return
+    try {
+      const { data } = await scheduleWishService.getMyWishes(
+        format(weekStart, 'yyyy-MM-dd'),
+        format(weekEnd, 'yyyy-MM-dd')
+      )
+      setWishDates(
+        new Set(data.map((w) => format(new Date(w.date), 'yyyy-MM-dd')))
+      )
+    } catch {
+      // не критично
+    }
+  }, [user, weekStart, weekEnd])
+
+  useEffect(() => {
+    loadWishes()
+  }, [loadWishes])
+
+  const toggleWish = useCallback(
+    async (day: Date) => {
+      const key = format(day, 'yyyy-MM-dd')
+      const isWished = wishDates.has(key)
+      // Оптимістично оновлюємо
+      setWishDates((prev) => {
+        const next = new Set(prev)
+        if (isWished) next.delete(key)
+        else next.add(key)
+        return next
+      })
+      try {
+        if (isWished) await scheduleWishService.removeWishByDate(key)
+        else await scheduleWishService.addWish(key)
+      } catch {
+        toast.error('Не вдалося зберегти побажання')
+        loadWishes()
+      }
+    },
+    [wishDates, loadWishes]
+  )
+
   if (!isMounted) {
     return (
       <main className='p-8 max-w-full mx-auto'>
@@ -247,6 +362,38 @@ export default function Page() {
             >
               <FiChevronRight className='text-gray-600' />
             </button>
+          </div>
+        </div>
+
+        {/* Побажання по вихідних — доступні кожному співробітнику */}
+        <div className='mb-6 rounded-xl border border-gray-100 bg-gray-50/60 p-4'>
+          <div className='flex items-center gap-2 mb-3'>
+            <span className='text-lg'>🌙</span>
+            <span className='text-sm font-semibold text-gray-700'>
+              Мої побажання на вихідні
+            </span>
+            <span className='text-xs text-gray-400'>
+              (враховуються при генерації графіка)
+            </span>
+          </div>
+          <div className='flex flex-wrap gap-2'>
+            {weekDays.map((day) => {
+              const key = format(day, 'yyyy-MM-dd')
+              const active = wishDates.has(key)
+              return (
+                <button
+                  key={key}
+                  onClick={() => toggleWish(day)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                    active
+                      ? 'bg-indigo-500 text-white border-indigo-500'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+                  }`}
+                >
+                  {format(day, 'EE, d', { locale: uk })}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -321,20 +468,67 @@ export default function Page() {
                           </button>
                         </div>
 
-                        {(isAdmin || !department.isLocked) && (
-                          <button
-                            onClick={() =>
-                              handleAddClick(
-                                department.departmentId,
-                                department.isLocked
-                              )
-                            }
-                            className='p-1.5 rounded-full hover:bg-gray-200 transition'
-                            title='Додати зміну у це відділення'
-                          >
-                            <FiPlus className='text-primary' />
-                          </button>
-                        )}
+                        <div className='flex items-center gap-2'>
+                          {isAdmin &&
+                            (department.users.some((emp) =>
+                              emp.schedule.some((s) => s?.isDraft)
+                            ) ? (
+                              <>
+                                <span className='text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 uppercase'>
+                                  Чернетка
+                                </span>
+                                <button
+                                  onClick={() =>
+                                    handlePublish(department.departmentId)
+                                  }
+                                  disabled={busyDeptId === department.departmentId}
+                                  className='flex items-center gap-1.5 text-xs font-medium text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg px-3 py-1.5 disabled:opacity-40'
+                                  title='Опублікувати згенерований графік'
+                                >
+                                  <FaCheck size={11} /> Прийняти
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleReject(department.departmentId)
+                                  }
+                                  disabled={busyDeptId === department.departmentId}
+                                  className='flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 rounded-lg px-3 py-1.5 disabled:opacity-40'
+                                  title='Відхилити чернетку'
+                                >
+                                  <FaTimes size={11} /> Відхилити
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() =>
+                                  handleGenerate(department.departmentId)
+                                }
+                                disabled={busyDeptId === department.departmentId}
+                                className='flex items-center gap-1.5 text-xs font-medium text-white bg-primary hover:opacity-90 rounded-lg px-3 py-1.5 disabled:opacity-40'
+                                title='Автоматично згенерувати графік на тиждень'
+                              >
+                                <FaMagic size={11} />
+                                {busyDeptId === department.departmentId
+                                  ? 'Генерація...'
+                                  : 'Згенерувати'}
+                              </button>
+                            ))}
+
+                          {(isAdmin || !department.isLocked) && (
+                            <button
+                              onClick={() =>
+                                handleAddClick(
+                                  department.departmentId,
+                                  department.isLocked
+                                )
+                              }
+                              className='p-1.5 rounded-full hover:bg-gray-200 transition'
+                              title='Додати зміну у це відділення'
+                            >
+                              <FiPlus className='text-primary' />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -377,17 +571,28 @@ export default function Page() {
                                 </div>
                               ) : (
                                 <div
-                                  className={`mx-auto w-full max-w-[120px] rounded-lg border-l-4 px-2 py-2 ${shiftPalette(schedule.startedAt)}`}
+                                  className={`mx-auto w-full max-w-[120px] rounded-lg border-l-4 px-2 py-2 ${shiftPalette(schedule.startedAt)} ${
+                                    schedule.isDraft
+                                      ? 'border-dashed ring-1 ring-amber-300 opacity-90'
+                                      : ''
+                                  }`}
                                 >
                                   <div className='text-xs font-bold whitespace-nowrap'>
                                     {schedule.startedAt}–{schedule.endTime}
                                   </div>
-                                  <div className='text-[10px] opacity-70'>
-                                    {shiftDurationHours(
-                                      schedule.startedAt,
-                                      schedule.endTime
-                                    )}{' '}
-                                    год
+                                  <div className='text-[10px] opacity-70 flex items-center justify-between'>
+                                    <span>
+                                      {shiftDurationHours(
+                                        schedule.startedAt,
+                                        schedule.endTime
+                                      )}{' '}
+                                      год
+                                    </span>
+                                    {schedule.isDraft && (
+                                      <span className='text-amber-600 font-semibold'>
+                                        ✨
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               )

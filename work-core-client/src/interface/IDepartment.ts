@@ -9,4 +9,13 @@ export interface IDepartment {
     latitude?: number
     longitude?: number
     isActive: boolean
+    staffingByWeekday?: Record<string, number>
+}
+
+export interface IDepartmentMember {
+    id: number
+    firstName: string
+    lastName: string
+    avatar?: string
+    role: string
 }

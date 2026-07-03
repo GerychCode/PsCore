@@ -28,6 +28,8 @@ model User {
   notifications Notification[]
   sentMessages     ChatMessage[] @relation("SentMessages")
   receivedMessages ChatMessage[] @relation("ReceivedMessages")
+  departments      Department[]  @relation("DepartmentMembers")
+  scheduleWishes   ScheduleWish[]
 }
 
 enum Role {
@@ -47,10 +49,12 @@ model Department {
   latitude            Float?
   longitude           Float?
   isActive            Boolean? @default(true) @map("is_active")
+  staffingByWeekday   Json?    @map("staffing_by_weekday")
 
   shiftDepartments    WorkShift[]
   scheduleDepartments WorkSchedule[]
   scheduleLocks       WorkScheduleLock[]
+  members             User[]   @relation("DepartmentMembers")
 
   @@map("departments")
 }
@@ -99,6 +103,7 @@ model WorkSchedule {
   startedAt    String   @map("started_at")
   endTime      String   @map("end_time")
   isDayOff     Boolean? @default(false) @map("is_day_off")
+  isDraft      Boolean  @default(false) @map("is_draft")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -106,6 +111,18 @@ model WorkSchedule {
   department Department @relation(fields: [departmentId], references: [id])
 
   @@map("work_schedule")
+}
+
+model ScheduleWish {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  date      DateTime @map("date")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("schedule_wishes")
 }
 
 model WorkScheduleLock {

@@ -16,6 +16,7 @@ import { TelegrafModule } from 'nestjs-telegraf';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { ChatModule } from './chat/chat.module';
+import { ScheduleWishModule } from './schedule.wish/schedule.wish.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ChatModule } from './chat/chat.module';
     }),
     TelegramModule,
     ChatModule,
+    ScheduleWishModule,
   ],
   controllers: [],
   providers: [

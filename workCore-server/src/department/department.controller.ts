@@ -14,6 +14,7 @@ import { DepartmentService } from './department.service';
 import { CreateDepartmentDto } from './dto/create.department.dto';
 import { Authorization } from '../common/decorator/auth.decorator';
 import { UpdateDepartmentDto } from './dto/update.department.dto';
+import { SetMembersDto } from './dto/staffing.dto';
 import { Role } from '../../generated/prisma';
 
 @Controller('department')
@@ -31,6 +32,23 @@ export class DepartmentController {
           error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  @Get(':departmentId/members')
+  @Authorization()
+  async getMembers(
+      @Param('departmentId', ParseIntPipe) departmentId: number,
+  ) {
+    return this.departmentService.getMembers(departmentId);
+  }
+
+  @Put(':departmentId/members')
+  @Authorization(Role.Admin)
+  async setMembers(
+      @Param('departmentId', ParseIntPipe) departmentId: number,
+      @Body() dto: SetMembersDto,
+  ) {
+    return this.departmentService.setMembers(departmentId, dto.userIds);
   }
 
   @Get(':departmentId')

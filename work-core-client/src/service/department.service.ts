@@ -1,9 +1,19 @@
 import { axiosClassic } from '@/api/interceptors'
-import { IDepartment } from '@/interface/IDepartment'
+import { IDepartment, IDepartmentMember } from '@/interface/IDepartment'
 
 class DepartmentService {
     public async getDepartmentList() {
         return await axiosClassic.get(`/department`)
+    }
+
+    public async getMembers(id: number) {
+        return await axiosClassic.get<IDepartmentMember[]>(
+            `/department/${id}/members`
+        )
+    }
+
+    public async setMembers(id: number, userIds: number[]) {
+        return await axiosClassic.put(`/department/${id}/members`, { userIds })
     }
 
     public async createDepartment(data: IDepartment) {
