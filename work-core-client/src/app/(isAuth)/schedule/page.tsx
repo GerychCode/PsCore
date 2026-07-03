@@ -49,6 +49,13 @@ export default function Page() {
   const user = userStore((state) => state.user)
   const isAdmin = userStore((state) => state.isAdmin)
   const [currentDate, setCurrentDate] = useState(new Date())
+  // Дати ("сьогодні", межі тижня) залежать від таймзони: сервер (UTC) і браузер
+  // можуть бачити різні дні → рендеримо календар лише на клієнті
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
   const [weekView, setWeekView] = useState<IWeekView[]>([])
   const [selectedSchedule, setSelectedSchedule] = useState<
     IWorkSchedule | Partial<IWorkScheduleCreate> | null
@@ -197,6 +204,16 @@ export default function Page() {
   const goToNextWeek = useCallback(() => {
     setCurrentDate((prev) => addDays(prev, 7))
   }, [])
+
+  if (!isMounted) {
+    return (
+      <main className='p-8 max-w-full mx-auto'>
+        <div className='bg-white rounded-xl shadow-md p-6'>
+          <p className='text-center text-gray-500'>Завантаження графіку...</p>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className='p-8 max-w-full mx-auto'>
