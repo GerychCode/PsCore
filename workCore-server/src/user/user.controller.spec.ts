@@ -18,9 +18,13 @@ describe('UserController', () => {
     controller = new UserController(userService);
   });
 
-  it('getUser повертає поточного користувача', async () => {
-    await controller.getUser(1);
+  it('getUser повертає поточного користувача з правами', async () => {
+    userService.findById.mockResolvedValue({ id: 1, firstName: 'A' });
+    const me = { id: 1, role: 'Admin', appRoles: [] } as any;
+    const result: any = await controller.getUser(me);
     expect(userService.findById).toHaveBeenCalledWith(1);
+    // enum Admin → усі права
+    expect(result.permissions).toContain('ADMINISTRATOR');
   });
 
   it('getUserById знаходить за id (адмін бачить все)', async () => {

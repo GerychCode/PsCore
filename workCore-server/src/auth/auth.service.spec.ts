@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
+import { RolesService } from '../roles/roles.service';
 
 jest.mock('bcrypt');
 
@@ -24,6 +25,7 @@ describe('AuthService', () => {
     sendVerificationEmail: jest.Mock;
     sendPasswordResetEmail: jest.Mock;
   };
+  let rolesService: { assignDefaultRole: jest.Mock };
   let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
 
   const buildReq = (saveErr?: unknown, destroyErr?: unknown) =>
@@ -46,6 +48,7 @@ describe('AuthService', () => {
       sendVerificationEmail: jest.fn(),
       sendPasswordResetEmail: jest.fn(),
     };
+    rolesService = { assignDefaultRole: jest.fn() };
     redis = { set: jest.fn(), get: jest.fn(), del: jest.fn() };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -57,6 +60,7 @@ describe('AuthService', () => {
           useValue: { getOrThrow: jest.fn().mockReturnValue('session') },
         },
         { provide: MailService, useValue: mailService },
+        { provide: RolesService, useValue: rolesService },
         { provide: 'REDIS_CLIENT', useValue: redis },
       ],
     }).compile();

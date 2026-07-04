@@ -64,6 +64,7 @@ export const config = {
     '/schedule/:path*',
     '/departments/:path*',
     '/chat/:path*',
+    '/roles/:path*',
     '/auth/:path*',
     '/wip',
   ],

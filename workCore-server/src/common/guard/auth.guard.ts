@@ -15,7 +15,10 @@ export class AuthGuard implements CanActivate {
             );
         }
 
-        const user = await this.userService.findById(request.session.userId);
+        // Вантажимо користувача разом із ролями — для перевірки прав
+        const user = await this.userService.findByIdWithRoles(
+            request.session.userId,
+        );
         request.user = user;
 
         return true;

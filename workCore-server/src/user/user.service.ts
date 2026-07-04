@@ -69,6 +69,29 @@ export class UserService {
     });
   }
 
+  /** Користувач із призначеними ролями (без хешу пароля) — для гардів прав. */
+  public async findByIdWithRoles(id: number) {
+    const user = await this.prismaService.user.findUnique({
+      where: { id },
+      include: {
+        appRoles: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            permissions: true,
+            position: true,
+          },
+        },
+      },
+    });
+    if (!user) {
+      throw new NotFoundException(`Користувача не знайдено`);
+    }
+    const { passwordHash, ...safe } = user;
+    return safe;
+  }
+
   public async create(data: {
     firstName: string;
     lastName: string;

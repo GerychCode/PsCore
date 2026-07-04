@@ -18,6 +18,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ChatModule } from './chat/chat.module';
 import { ScheduleWishModule } from './schedule.wish/schedule.wish.module';
 import { MailModule } from './mail/mail.module';
+import { RolesModule } from './roles/roles.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { MailModule } from './mail/mail.module';
     ChatModule,
     ScheduleWishModule,
     MailModule,
+    RolesModule,
   ],
   controllers: [],
   providers: [

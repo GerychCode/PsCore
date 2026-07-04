@@ -33,6 +33,22 @@ model User {
   receivedMessages ChatMessage[] @relation("ReceivedMessages")
   departments      Department[]  @relation("DepartmentMembers")
   scheduleWishes   ScheduleWish[]
+  appRoles         AppRole[]     @relation("UserRoles")
+}
+
+model AppRole {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  color       String   @default("#99AAB5")
+  permissions String[] @default([])
+  position    Int      @default(0)
+  isSystem    Boolean  @default(false) @map("is_system")
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  members     User[]   @relation("UserRoles")
+
+  @@map("app_roles")
 }
 
 enum Role {

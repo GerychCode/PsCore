@@ -14,10 +14,13 @@ import {
   IEmployeeLevel,
 } from '@/service/employee.level.service'
 import { userService } from '@/service/user.service'
+import { rolesService } from '@/service/roles.service'
 
 const Page = () => {
   const user = userStore((state) => state.user)
   const isAdmin = userStore((state) => state.isAdmin)
+  const hasPermission = userStore((state) => state.hasPermission)
+  const canManageRoles = hasPermission('MANAGE_ROLES')
   const { mutate: fetchUsers, isPending, users } = useGetUserListMutation()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -26,11 +29,18 @@ const Page = () => {
     fetchUsers()
   }, [fetchUsers])
 
-  // Рівні доступні лише адміну (ендпоінт під Role.Admin)
+  // Рівні доступні тим, хто керує користувачами
   const { data: rankingResponse } = useQuery({
     queryKey: ['employee-levels'],
     queryFn: () => employeeLevelService.getRanking(),
-    enabled: isAdmin,
+    enabled: hasPermission('MANAGE_USERS'),
+  })
+
+  // Список ролей для призначення — лише для тих, хто керує ролями
+  const { data: rolesResponse } = useQuery({
+    queryKey: ['all-roles'],
+    queryFn: () => rolesService.getAll(),
+    enabled: canManageRoles,
   })
 
   const levelByUserId = new Map<number, IEmployeeLevel>(
@@ -68,6 +78,8 @@ const Page = () => {
                   level={levelByUserId.get(employee.id)}
                   canEditLevel={isAdmin && employee.id !== user?.id}
                   onBaseLevelSave={handleBaseLevelSave}
+                  canManageRoles={canManageRoles}
+                  allRoles={rolesResponse?.data ?? []}
               />
           ))}
         </div>

@@ -13,6 +13,8 @@ import { WorkScheduleService } from './work.schedule.service';
 import { ScheduleGeneratorService } from './schedule.generator.service';
 import { Authorization } from '../common/decorator/auth.decorator';
 import { Authorized } from '../common/decorator/authorized.decorator';
+import { RequirePermissions } from '../common/permissions/permissions.decorator';
+import { Permission } from '../common/permissions/permission.enum';
 import { CreateWorkScheduleDto } from './dto/create-work-schedule.dto';
 import { UpdateWorkScheduleDto } from './dto/update-work-schedule.dto';
 import { FilterWorkScheduleDto } from './dto/filter-work-schedule.dto';
@@ -44,7 +46,7 @@ export class WorkScheduleController {
   }
 
   @Post('generate')
-  @Authorization(Role.Admin)
+  @RequirePermissions(Permission.MANAGE_SCHEDULE)
   generateWeek(@Body() dto: GenerateWeekDto) {
     return this.scheduleGeneratorService.generateWeek(
       dto.departmentId,
@@ -53,7 +55,7 @@ export class WorkScheduleController {
   }
 
   @Post('generate/publish')
-  @Authorization(Role.Admin)
+  @RequirePermissions(Permission.MANAGE_SCHEDULE)
   publishWeek(@Body() dto: GenerateWeekDto) {
     return this.scheduleGeneratorService.publishWeek(
       dto.departmentId,
@@ -62,7 +64,7 @@ export class WorkScheduleController {
   }
 
   @Post('generate/reject')
-  @Authorization(Role.Admin)
+  @RequirePermissions(Permission.MANAGE_SCHEDULE)
   rejectWeek(@Body() dto: GenerateWeekDto) {
     return this.scheduleGeneratorService.rejectWeek(dto.departmentId, dto.date);
   }
@@ -102,7 +104,7 @@ export class WorkScheduleController {
   }
 
   @Post('lock')
-  @Authorization(Role.Admin)
+  @RequirePermissions(Permission.MANAGE_SCHEDULE)
   toggleWeekLock(@Body() dto: LockWeekDto) {
     return this.workScheduleService.toggleWeekLock(dto);
   }

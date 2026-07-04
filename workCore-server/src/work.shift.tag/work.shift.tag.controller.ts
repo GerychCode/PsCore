@@ -13,7 +13,9 @@ import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { Authorization } from '../common/decorator/auth.decorator';
 import { Authorized } from '../common/decorator/authorized.decorator';
-import { Role, User } from '../../generated/prisma';
+import { RequirePermissions } from '../common/permissions/permissions.decorator';
+import { Permission } from '../common/permissions/permission.enum';
+import { User } from '../../generated/prisma';
 
 @Controller('shift-tag')
 export class WorkShiftTagController {
@@ -32,15 +34,14 @@ export class WorkShiftTagController {
   }
 
   @Post()
-  @Authorization(Role.Admin)
-  createTag(@Authorized() user: User, @Body() createDto: CreateTagDto) {
+  @RequirePermissions(Permission.MANAGE_TAGS)
+  createTag(@Body() createDto: CreateTagDto) {
     return this.tagService.createTag(createDto);
   }
 
   @Put(':id')
-  @Authorization(Role.Admin)
+  @RequirePermissions(Permission.MANAGE_TAGS)
   updateTag(
-    @Authorized() user: User,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateTagDto,
   ) {
@@ -48,8 +49,8 @@ export class WorkShiftTagController {
   }
 
   @Delete(':id')
-  @Authorization()
-  deleteTag(@Authorized() user: User, @Param('id', ParseIntPipe) id: number) {
-    return this.tagService.deleteTag(user, id);
+  @RequirePermissions(Permission.MANAGE_TAGS)
+  deleteTag(@Param('id', ParseIntPipe) id: number) {
+    return this.tagService.deleteTag(id);
   }
 }

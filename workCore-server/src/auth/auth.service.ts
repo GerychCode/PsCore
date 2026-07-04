@@ -16,6 +16,7 @@ import {ConfigService} from "@nestjs/config";
 import { Redis } from 'ioredis';
 import {UserDto} from "../user/dto/user.dto";
 import { MailService } from '../mail/mail.service';
+import { RolesService } from '../roles/roles.service';
 
 const VERIFY_PREFIX = 'verify-email:';
 const RESET_PREFIX = 'password-reset:';
@@ -29,6 +30,7 @@ export class AuthService {
       private userService: UserService,
       private configService: ConfigService,
       private readonly mailService: MailService,
+      private readonly rolesService: RolesService,
       @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
   ) {}
 
@@ -50,6 +52,8 @@ export class AuthService {
       isEmailVerified: false,
     })
 
+    // Кожен новий користувач одразу отримує дефолтну роль
+    await this.rolesService.assignDefaultRole(newUser.id);
     await this.issueVerification(newUser.id, createUserDto.email);
 
     // Без автологіну — спершу підтвердження пошти

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { sidebarMenuConfig } from '@/config/sidebar.menu'
 import { IconType } from 'react-icons'
 import { chatStore } from '@/store/chat.store'
+import { userStore } from '@/store/user.store'
 import { PathConfig } from '@/config/path.config'
 
 interface SidebarMenuProps {
@@ -14,13 +15,18 @@ interface SidebarMenuProps {
 export function SidebarMenu({ collapsed }: SidebarMenuProps) {
     const pathname = usePathname()
     const unreadTotal = chatStore((state) => state.unreadTotal)
+    const hasPermission = userStore((state) => state.hasPermission)
+
+    const menuItems = sidebarMenuConfig.filter(
+        (item) => !item.permission || hasPermission(item.permission)
+    )
 
     return (
         <nav
             className={`transition-all duration-300 ease-in-out w-full list-none h-full`}
         >
             <ul>
-                {sidebarMenuConfig.map((item, index) => {
+                {menuItems.map((item, index) => {
                     const Icon = item.icon as IconType | undefined
                     const isActive = pathname === item.path
                     const showChatBadge =

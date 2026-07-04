@@ -21,6 +21,9 @@ import {
 import { UserService } from './user.service';
 import { Authorized } from '../common/decorator/authorized.decorator';
 import { Authorization } from '../common/decorator/auth.decorator';
+import { RequirePermissions } from '../common/permissions/permissions.decorator';
+import { Permission } from '../common/permissions/permission.enum';
+import { resolvePermissions } from '../common/permissions/permissions.util';
 import { $Enums, User } from '../../generated/prisma';
 import Role = $Enums.Role;
 import { UpdateUserDto, UpdateUserDtoAdmin } from './dto/update.user.dto';
@@ -34,8 +37,14 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
   @Get()
   @Authorization()
-  public async getUser(@Authorized('id') userId: number) {
-    return this.userService.findById(userId);
+  public async getUser(@Authorized() user: User) {
+    // Повертаємо профіль разом із обчисленими правами — клієнт гейтить UI
+    const profile = await this.userService.findById((user as any).id);
+    return {
+      ...profile,
+      appRoles: (user as any).appRoles ?? [],
+      permissions: [...resolvePermissions(user as any)],
+    };
   }
 
   @Get('list/:id')
@@ -89,7 +98,7 @@ export class UserController {
   }
 
   @Put('update/:id')
-  @Authorization(Role.Admin)
+  @RequirePermissions(Permission.MANAGE_USERS)
   updateUserForAdmin(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDtoAdmin,
@@ -104,7 +113,7 @@ export class UserController {
   }
 
   @Delete('delete/:id')
-  @Authorization(Role.Admin)
+  @RequirePermissions(Permission.MANAGE_USERS)
   deleteUser(
     @Authorized('id') userId: number,
     @Param('id', ParseIntPipe) targetUserId: number,

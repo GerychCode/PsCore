@@ -1,14 +1,11 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
-import { $Enums, User } from '../../generated/prisma';
-import Role = $Enums.Role;
 
 @Injectable()
 export class WorkShiftTagService {
@@ -60,11 +57,8 @@ export class WorkShiftTagService {
     });
   }
 
-  async deleteTag(user: User, id: number) {
-    if (user.role !== Role.Admin) {
-      throw new ForbiddenException('Тільки адміністратор може видаляти теги.');
-    }
-
+  async deleteTag(id: number) {
+    // Доступ контролює PermissionsGuard (MANAGE_TAGS)
     await this.getTagById(id);
 
     return this.prisma.tag.delete({

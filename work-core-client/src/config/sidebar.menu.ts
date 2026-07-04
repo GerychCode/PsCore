@@ -5,11 +5,14 @@ import { CgProfile } from 'react-icons/cg'
 import {FaRegCalendarAlt} from "react-icons/fa";
 import { HiOutlineOfficeBuilding } from "react-icons/hi";
 import { IoChatbubblesOutline } from "react-icons/io5";
+import { MdOutlineAdminPanelSettings } from "react-icons/md";
 
 interface ISidebarMenu {
   title: string
   icon?: IconType
   path: string
+  // Якщо задано — пункт видно лише за наявності цього права
+  permission?: string
 }
 export const sidebarMenuConfig: ISidebarMenu[] = [
   {
@@ -41,5 +44,11 @@ export const sidebarMenuConfig: ISidebarMenu[] = [
     title: 'Чат',
     icon: IoChatbubblesOutline,
     path: '/chat',
+  },
+  {
+    title: 'Ролі та права',
+    icon: MdOutlineAdminPanelSettings,
+    path: '/roles',
+    permission: 'MANAGE_ROLES',
   },
 ]

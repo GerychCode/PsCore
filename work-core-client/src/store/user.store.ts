@@ -5,25 +5,37 @@ import { IUser } from '@/interface/IUser'
 interface UserStore {
     user: IUser | null
     isAdmin: boolean
+    permissions: string[]
     updateUser: (user: IUser) => void
+    hasPermission: (permission: string) => boolean
     logout: () => void
 }
 
+const computeIsAdmin = (user: IUser) =>
+    user.role === 'Admin' || (user.permissions ?? []).includes('ADMINISTRATOR')
+
 export const userStore = create<UserStore>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             user: null,
             isAdmin: false,
+            permissions: [],
             updateUser: (user: IUser) =>
                 set(() => ({
                     user,
-                    isAdmin: user.role === 'Admin',
+                    isAdmin: computeIsAdmin(user),
+                    permissions: user.permissions ?? [],
                 })),
-            logout: () => set({ user: null, isAdmin: false }),
+            hasPermission: (permission: string) => {
+                const state = get()
+                if (state.isAdmin) return true
+                return state.permissions.includes(permission)
+            },
+            logout: () => set({ user: null, isAdmin: false, permissions: [] }),
         }),
         {
-            name: 'workcore-user-storage', // Унікальне ім'я ключа в localStorage
-            storage: createJSONStorage(() => localStorage), // Використовуємо localStorage
+            name: 'workcore-user-storage',
+            storage: createJSONStorage(() => localStorage),
         }
     )
 )

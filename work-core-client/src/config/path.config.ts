@@ -16,6 +16,7 @@ export enum PathConfig {
   DEPARTMENTS = '/departments',
   SETTINGS = '/settings',
   CHAT = '/chat',
+  ROLES = '/roles',
 }
 
 export const routeLabels: Record<string, string> = {
@@ -29,4 +30,5 @@ export const routeLabels: Record<string, string> = {
   [PathConfig.DEPARTMENTS]: 'Відділення',
   [PathConfig.SETTINGS]: 'Налаштування',
   [PathConfig.CHAT]: 'Чат',
+  [PathConfig.ROLES]: 'Ролі та права',
 }
