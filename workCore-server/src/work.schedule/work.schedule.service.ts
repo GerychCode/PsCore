@@ -13,6 +13,7 @@ import {
   endOfDay,
   parse,
   parseISO,
+  getISODay,
 } from 'date-fns';
 import { PrismaService } from '../prisma/prisma.service';
 import { DepartmentService } from '../department/department.service';
@@ -221,7 +222,7 @@ export class WorkScheduleService {
 
     const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
-    const [departments, users, schedules, locks] = await Promise.all([
+    const [departments, users, schedules, locks, wishes] = await Promise.all([
       this.prismaService.department.findMany({ where: { isActive: true } }),
       this.prismaService.user.findMany({
         select: { id: true, firstName: true, lastName: true },
@@ -241,7 +242,20 @@ export class WorkScheduleService {
           weekStart: weekStart,
         },
       }),
+      // Побажання потрібні лише адміну — щоб позначити порушення в чернетці
+      isAdmin
+        ? this.prismaService.scheduleWish.findMany({
+            where: { date: { gte: weekStart, lte: weekEnd } },
+          })
+        : Promise.resolve([]),
     ]);
+
+    // Набір "userId|дата" для швидкої перевірки порушених побажань
+    const wishKeys = new Set(
+      wishes.map(
+        (w) => `${w.userId}|${formatISO(w.date, { representation: 'date' })}`,
+      ),
+    );
 
     const schedulesByUser = schedules.reduce((acc, schedule) => {
       if (!acc[schedule.userId]) {
@@ -271,6 +285,11 @@ export class WorkScheduleService {
               endTime: schedule.endTime,
               isDayOff: schedule.isDayOff,
               isDraft: schedule.isDraft,
+              // Чернетка, що ставить людину в її бажаний вихідний
+              wishViolated:
+                schedule.isDraft &&
+                !schedule.isDayOff &&
+                wishKeys.has(`${user.id}|${dayKey}`),
             };
           }
           return null;
@@ -288,10 +307,26 @@ export class WorkScheduleService {
         u.schedule.some((s) => s !== null),
       );
 
+      // Скільки людей стоїть на кожен день тижня vs потрібний штат
+      const staffing = (department.staffingByWeekday ?? {}) as Record<
+        string,
+        number
+      >;
+      const coverage = weekDays.map((day, index) => {
+        const required = Number(staffing[String(getISODay(day))] ?? 0);
+        const assigned = usersWithSchedulesInDept.filter((u) => {
+          const cell = u.schedule[index];
+          return cell && !cell.isDayOff;
+        }).length;
+        return { required, assigned };
+      });
+
       return {
         departmentId: department.id,
         departmentName: department.name,
         isLocked: !!locksByDepartment[department.id],
+        staffingByWeekday: department.staffingByWeekday ?? null,
+        coverage,
         users: usersWithSchedulesInDept,
       };
     });

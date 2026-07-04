@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { AppNotification } from '@/app/(isAuth)/layout'
 import { IChatMessage } from '@/interface/IChat'
 import { PathConfig } from '@/config/path.config'
+import { chatStore } from '@/store/chat.store'
 
 export const useWebSockets = (
   onNotification: (notif: AppNotification) => void
@@ -44,6 +45,9 @@ export const useWebSockets = (
       // Тост лише для вхідних і коли чат не відкритий — там повідомлення й так видно
       if (message.senderId === user.id) return
       if (window.location.pathname.startsWith(PathConfig.CHAT)) return
+
+      // Глобальний лічильник непрочитаних (на сторінці чату його веде сама сторінка)
+      chatStore.getState().increment()
 
       try {
         new Audio('/notification.mp3').play().catch(() => {})

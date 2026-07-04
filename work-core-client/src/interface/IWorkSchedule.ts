@@ -5,6 +5,7 @@ export interface IWorkSchedule {
   endTime: string
   isDayOff: boolean
   isDraft?: boolean
+  wishViolated?: boolean
 }
 
 export interface IGenerateWarning {
@@ -32,10 +33,17 @@ export interface IEmployeeSchedule {
   schedule: (IWorkSchedule | null)[]
 }
 
+export interface IDayCoverage {
+  required: number
+  assigned: number
+}
+
 export interface IWeekView {
   departmentId: number
   departmentName: string
   isLocked: boolean
+  staffingByWeekday?: Record<string, number> | null
+  coverage?: IDayCoverage[]
   users: IEmployeeSchedule[]
 }
 

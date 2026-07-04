@@ -21,10 +21,14 @@ export interface GenDay {
   /** ISO день тижня: 1 = Пн … 7 = Нд */
   weekday: number;
   required: number;
-  /** Користувачі, які вже мають зміну цього дня (published, будь-яке відділення) */
+  /** Зайняті цього дня будь-де (published або чернетка іншого відділу) — виключаємо */
   busyUserIds: number[];
+  /** Скільки слотів цього відділу вже закрито (published-зміни саме цього відділу) */
+  coveredCount: number;
   /** Користувачі, що хочуть цей день вихідним */
   wishUserIds: number[];
+  /** Тривалість зміни цього дня в годинах (для рівномірності навантаження) */
+  shiftHours: number;
 }
 
 export interface Assignment {
@@ -48,8 +52,8 @@ export interface GenResult {
 export class ScheduleGeneratorService {
   // Порушити побажання можна лише коли інакше не закрити зміну
   private readonly WISH_PENALTY = 10000;
-  // Рівномірність важливіша за рівень: одна зайва зміна ≈ повний розкид рівнів
-  private readonly FAIRNESS_WEIGHT = 100;
+  // Рівномірність за годинами: ~10-годинна зміна ≈ повний розкид рівнів
+  private readonly FAIRNESS_PER_HOUR = 10;
   private readonly LEVEL_WEIGHT = 10;
   private readonly RELIABILITY_WEIGHT = 0.5;
 
@@ -66,7 +70,8 @@ export class ScheduleGeneratorService {
   computeAssignments(days: GenDay[], members: GenMember[]): GenResult {
     const assignments: Assignment[] = [];
     const warnings: GenWarning[] = [];
-    const assignedCountByUser = new Map<number, number>();
+    // Наростаючі відпрацьовані години на тижні — основа рівномірності
+    const assignedHoursByUser = new Map<number, number>();
 
     const activeDays = days.filter((d) => d.required > 0);
     const avgRequired =
@@ -81,8 +86,8 @@ export class ScheduleGeneratorService {
       if (day.required <= 0) continue;
 
       const busy = new Set(day.busyUserIds);
-      const alreadyCovered = day.busyUserIds.length;
-      const remaining = day.required - alreadyCovered;
+      // Скільки цього відділу вже закрито published-змінами
+      const remaining = day.required - day.coveredCount;
       if (remaining <= 0) continue;
 
       const wishSet = new Set(day.wishUserIds);
@@ -91,11 +96,11 @@ export class ScheduleGeneratorService {
       const pool = members
         .filter((m) => !busy.has(m.userId))
         .map((m) => {
-          const assigned = assignedCountByUser.get(m.userId) ?? 0;
+          const assignedHours = assignedHoursByUser.get(m.userId) ?? 0;
           let score = 0;
 
           if (wishSet.has(m.userId)) score -= this.WISH_PENALTY;
-          score -= assigned * this.FAIRNESS_WEIGHT;
+          score -= assignedHours * this.FAIRNESS_PER_HOUR;
           // Пікові дні тягнуть сильних; спокійні — ротація нижчих рівнів
           score += isPeak
             ? m.level * this.LEVEL_WEIGHT
@@ -111,9 +116,9 @@ export class ScheduleGeneratorService {
 
       for (const { member } of picked) {
         assignments.push({ userId: member.userId, weekday: day.weekday });
-        assignedCountByUser.set(
+        assignedHoursByUser.set(
           member.userId,
-          (assignedCountByUser.get(member.userId) ?? 0) + 1,
+          (assignedHoursByUser.get(member.userId) ?? 0) + day.shiftHours,
         );
         if (wishSet.has(member.userId)) {
           warnings.push({
@@ -130,13 +135,21 @@ export class ScheduleGeneratorService {
           weekday: day.weekday,
           type: 'UNDERSTAFFED',
           message: `Недокомплект: потрібно ${day.required}, призначено ${
-            alreadyCovered + picked.length
+            day.coveredCount + picked.length
           } (день ${day.weekday}).`,
         });
       }
     }
 
     return { assignments, warnings };
+  }
+
+  /** Тривалість зміни в годинах з рядків "HH:mm". */
+  private shiftLengthHours(start: string, end: string): number {
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    const minutes = eh * 60 + em - (sh * 60 + sm);
+    return minutes > 0 ? minutes / 60 : 0;
   }
 
   private isWeekend(weekday: number) {
@@ -190,14 +203,20 @@ export class ScheduleGeneratorService {
       reliability: l.reliability,
     }));
 
-    // Що вже зайнято (published-зміни будь-якого відділення) та побажання
-    const [publishedSchedules, wishes] = await Promise.all([
+    // Спершу прибираємо стару чернетку цього відділу — щоб не рахувати її як зайнятість
+    await this.prismaService.workSchedule.deleteMany({
+      where: {
+        departmentId,
+        isDraft: true,
+        date: { gte: weekStart, lte: weekEnd },
+      },
+    });
+
+    // Усе, що лишилось: published (будь-який відділ) + чернетки ІНШИХ відділів + побажання
+    const [existingSchedules, wishes] = await Promise.all([
       this.prismaService.workSchedule.findMany({
-        where: {
-          date: { gte: weekStart, lte: weekEnd },
-          isDraft: false,
-        },
-        select: { userId: true, date: true, departmentId: true, isDayOff: true },
+        where: { date: { gte: weekStart, lte: weekEnd } },
+        select: { userId: true, date: true, departmentId: true, isDraft: true },
       }),
       this.prismaService.scheduleWish.findMany({
         where: {
@@ -208,37 +227,52 @@ export class ScheduleGeneratorService {
     ]);
 
     const memberIds = new Set(members.map((m) => m.id));
+    const weekdayHours = (weekday: number) =>
+      this.isWeekend(weekday)
+        ? this.shiftLengthHours(
+            department.weekendsOpeningTime,
+            department.weekendsClosingTime,
+          )
+        : this.shiftLengthHours(
+            department.weekdaysOpeningTime,
+            department.weekdaysClosingTime,
+          );
 
     const genDays: GenDay[] = weekDays.map((day) => {
       const weekday = getISODay(day); // 1..7
       const required = Number(staffing[String(weekday)] ?? 0);
+      const sameDay = existingSchedules.filter(
+        (s) => getISODay(s.date) === weekday,
+      );
 
-      const busyUserIds = publishedSchedules
-        .filter(
-          (s) => getISODay(s.date) === weekday && memberIds.has(s.userId),
-        )
+      // Зайняті будь-де цього дня (виключаємо з кандидатів)
+      const busyUserIds = sameDay
+        .filter((s) => memberIds.has(s.userId))
         .map((s) => s.userId);
+
+      // Скільки слотів САМЕ цього відділу вже закрито (published цього відділу)
+      const coveredCount = sameDay.filter(
+        (s) => s.departmentId === departmentId && !s.isDraft,
+      ).length;
 
       const wishUserIds = wishes
         .filter((w) => getISODay(w.date) === weekday)
         .map((w) => w.userId);
 
-      return { weekday, required, busyUserIds, wishUserIds };
+      return {
+        weekday,
+        required,
+        busyUserIds,
+        coveredCount,
+        wishUserIds,
+        shiftHours: weekdayHours(weekday),
+      };
     });
 
     const { assignments, warnings } = this.computeAssignments(
       genDays,
       genMembers,
     );
-
-    // Пересоздаємо чернетку цього відділення на тиждень з нуля
-    await this.prismaService.workSchedule.deleteMany({
-      where: {
-        departmentId,
-        isDraft: true,
-        date: { gte: weekStart, lte: weekEnd },
-      },
-    });
 
     const weekdayToDate = new Map(weekDays.map((d) => [getISODay(d), d]));
 

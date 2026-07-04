@@ -213,7 +213,10 @@ export class UserService {
       (acc, shift) => acc + (shift.totalHours || 0),
       0,
     );
-    const overtimeHours = totalHours > 176 ? totalHours - 176 : 0;
+    // Місячна норма годин (40-годинний тиждень ≈ 176 год/міс)
+    const MONTHLY_HOURS_NORM = 176;
+    const overtimeHours =
+      totalHours > MONTHLY_HOURS_NORM ? totalHours - MONTHLY_HOURS_NORM : 0;
 
     const dailyHoursMap = new Map<number, number>();
     shifts.forEach((shift) => {

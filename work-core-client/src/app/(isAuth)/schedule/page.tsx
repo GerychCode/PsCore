@@ -533,6 +533,43 @@ export default function Page() {
                     </td>
                   </tr>
 
+                  {isAdmin && department.coverage && (
+                    <tr className='bg-white'>
+                      <td className='text-left py-1.5 pl-4 text-[11px] uppercase tracking-wide text-gray-400 font-semibold border-b border-gray-100'>
+                        Покриття
+                      </td>
+                      {department.coverage.map((cov, i) => {
+                        const hasTarget = cov.required > 0
+                        const understaffed = cov.assigned < cov.required
+                        return (
+                          <td
+                            key={`cov-${department.departmentId}-${i}`}
+                            className='py-1.5 border-b border-gray-100 text-center'
+                          >
+                            {hasTarget ? (
+                              <span
+                                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                  understaffed
+                                    ? 'bg-red-50 text-red-600'
+                                    : 'bg-emerald-50 text-emerald-600'
+                                }`}
+                                title={
+                                  understaffed
+                                    ? 'Недокомплект на цей день'
+                                    : 'Штат укомплектовано'
+                                }
+                              >
+                                {cov.assigned}/{cov.required}
+                              </span>
+                            ) : (
+                              <span className='text-[11px] text-gray-300'>—</span>
+                            )}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )}
+
                   {department.users.map((employee) => (
                     <tr key={employee.userId} className='hover:bg-gray-50'>
                       <td className='text-left p-4 font-semibold text-gray-800 border-b border-gray-200'>
@@ -575,7 +612,16 @@ export default function Page() {
                                     schedule.isDraft
                                       ? 'border-dashed ring-1 ring-amber-300 opacity-90'
                                       : ''
+                                  } ${
+                                    schedule.wishViolated
+                                      ? 'ring-2 ring-red-400'
+                                      : ''
                                   }`}
+                                  title={
+                                    schedule.wishViolated
+                                      ? 'Порушено побажання вихідного'
+                                      : undefined
+                                  }
                                 >
                                   <div className='text-xs font-bold whitespace-nowrap'>
                                     {schedule.startedAt}–{schedule.endTime}
@@ -588,10 +634,16 @@ export default function Page() {
                                       )}{' '}
                                       год
                                     </span>
-                                    {schedule.isDraft && (
-                                      <span className='text-amber-600 font-semibold'>
-                                        ✨
+                                    {schedule.wishViolated ? (
+                                      <span className='text-red-500 font-semibold'>
+                                        ⚠️
                                       </span>
+                                    ) : (
+                                      schedule.isDraft && (
+                                        <span className='text-amber-600 font-semibold'>
+                                          ✨
+                                        </span>
+                                      )
                                     )}
                                   </div>
                                 </div>

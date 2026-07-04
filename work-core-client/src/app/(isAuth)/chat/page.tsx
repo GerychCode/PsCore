@@ -7,6 +7,7 @@ import { IoSend } from 'react-icons/io5'
 import { FaArrowLeft } from 'react-icons/fa'
 import Avatar from '@/app/components/user/Avatar'
 import { userStore } from '@/store/user.store'
+import { chatStore } from '@/store/chat.store'
 import { chatService } from '@/service/chat.service'
 import { userService } from '@/service/user.service'
 import { IChatMessage, IChatPartner, IConversation } from '@/interface/IChat'
@@ -101,6 +102,8 @@ export default function ChatPage() {
         }
       }
       refreshConversations()
+      // Реконсиляція глобального лічильника (вхідне в інший діалог / прочитання)
+      chatStore.getState().refresh()
     })
 
     socket.on('chat:read', ({ readerId }: { readerId: number }) => {
@@ -133,6 +136,7 @@ export default function ChatPage() {
       setHasMore(response.data.hasMore)
       await chatService.markConversationRead(partner.id)
       refreshConversations()
+      chatStore.getState().refresh()
     } catch {
       toast.error('Не вдалося завантажити діалог')
     }

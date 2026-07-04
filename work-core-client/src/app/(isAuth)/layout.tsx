@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { axiosClassic } from '@/api/interceptors'
 
 import { useWebSockets } from '@/hooks/useWebSockets'
+import { chatStore } from '@/store/chat.store'
 
 export interface AppNotification {
   id: number
@@ -40,7 +41,6 @@ export default function Layout({
     mutate()
   }, [])
 
-  // 1. Виносимо запит за списком в окрему функцію
   const fetchNotifications = useCallback(async () => {
     if (!userData?.id) return
     try {
@@ -50,20 +50,18 @@ export default function Layout({
     } catch (error) {}
   }, [userData?.id])
 
-  // 2. Отримуємо список при першому завантаженні (або зміні userData.id)
   useEffect(() => {
     fetchNotifications()
   }, [fetchNotifications])
 
-  // 3. Слухаємо кастомну подію invalidate_shifts для оновлення списку
+  // Початкове число непрочитаних повідомлень для бейджа в сайдбарі
+  useEffect(() => {
+    if (userData?.id) chatStore.getState().refresh()
+  }, [userData?.id])
+
   useEffect(() => {
     const handleInvalidateShifts = () => {
-      // Оновлюємо список сповіщень
       fetchNotifications()
-
-      // Якщо ця подія також має оновлювати дані профілю юзера,
-      // можеш додатково викликати mutate():
-      // mutate()
     }
 
     window.addEventListener('invalidate_shifts', handleInvalidateShifts)
@@ -73,7 +71,6 @@ export default function Layout({
     }
   }, [fetchNotifications])
 
-  // Обробка нових сповіщень через сокети
   const handleNewNotification = useCallback(
     (newNotification: AppNotification) => {
       setNotifications((prev) => [newNotification, ...prev])

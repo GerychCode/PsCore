@@ -22,7 +22,9 @@ describe('ScheduleGeneratorService.computeAssignments', () => {
     weekday,
     required,
     busyUserIds: opts.busyUserIds ?? [],
+    coveredCount: opts.coveredCount ?? 0,
     wishUserIds: opts.wishUserIds ?? [],
+    shiftHours: opts.shiftHours ?? 8,
   });
 
   it('заповнює потрібну к-сть слотів на день', () => {
@@ -41,13 +43,22 @@ describe('ScheduleGeneratorService.computeAssignments', () => {
     expect(warnings.some((w) => w.type === 'UNDERSTAFFED')).toBe(true);
   });
 
-  it('враховує вже зайнятих (published) людей у покритті дня', () => {
-    const days = [day(1, 2, { busyUserIds: [1] })];
+  it('враховує published-зміну цього відділу: 1 покрито → потрібен ще 1, і не user 1', () => {
+    // user1 вже працює цього дня в цьому відділі (published) → covered=1, busy=[1]
+    const days = [day(1, 2, { busyUserIds: [1], coveredCount: 1 })];
     const members = [member(1), member(2), member(3)];
     const { assignments } = service.computeAssignments(days, members);
-    // 1 вже покритий → потрібен ще 1, і це не user 1
     expect(assignments).toHaveLength(1);
     expect(assignments[0].userId).not.toBe(1);
+  });
+
+  it('виключає зайнятого в ІНШОМУ відділі, не зменшуючи потребу цього', () => {
+    // user1 зайнятий деінде (busy) але covered=0 → потрібно всі 2 з інших
+    const days = [day(1, 2, { busyUserIds: [1], coveredCount: 0 })];
+    const members = [member(1), member(2), member(3)];
+    const { assignments } = service.computeAssignments(days, members);
+    expect(assignments).toHaveLength(2);
+    expect(assignments.map((a) => a.userId)).not.toContain(1);
   });
 
   it('уникає побажань вихідного, якщо є ким замінити', () => {

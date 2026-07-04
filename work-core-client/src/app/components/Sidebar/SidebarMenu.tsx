@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { sidebarMenuConfig } from '@/config/sidebar.menu'
 import { IconType } from 'react-icons'
+import { chatStore } from '@/store/chat.store'
+import { PathConfig } from '@/config/path.config'
 
 interface SidebarMenuProps {
     collapsed: boolean
@@ -11,6 +13,7 @@ interface SidebarMenuProps {
 
 export function SidebarMenu({ collapsed }: SidebarMenuProps) {
     const pathname = usePathname()
+    const unreadTotal = chatStore((state) => state.unreadTotal)
 
     return (
         <nav
@@ -20,6 +23,8 @@ export function SidebarMenu({ collapsed }: SidebarMenuProps) {
                 {sidebarMenuConfig.map((item, index) => {
                     const Icon = item.icon as IconType | undefined
                     const isActive = pathname === item.path
+                    const showChatBadge =
+                        item.path === PathConfig.CHAT && unreadTotal > 0
 
                     return (
                         <li key={index}>
@@ -39,11 +44,18 @@ export function SidebarMenu({ collapsed }: SidebarMenuProps) {
                             `}
                             >
                                 {Icon && (
-                                    <Icon
-                                        className={`text-3xl flex-shrink-0 ${
-                                            isActive ? 'text-primary' : 'text-secondary'
-                                        }`}
-                                    />
+                                    <div className='relative flex-shrink-0'>
+                                        <Icon
+                                            className={`text-3xl ${
+                                                isActive ? 'text-primary' : 'text-secondary'
+                                            }`}
+                                        />
+                                        {showChatBadge && (
+                                            <span className='absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold'>
+                                                {unreadTotal > 99 ? '99+' : unreadTotal}
+                                            </span>
+                                        )}
+                                    </div>
                                 )}
                                 <AnimatePresence>
                                     {!collapsed && (
