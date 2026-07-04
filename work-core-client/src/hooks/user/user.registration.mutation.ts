@@ -21,7 +21,7 @@ export function useRegistrationMutation(
     mutationKey: ['registration'],
     mutationFn: authService.register,
     onSuccess: () => {
-      toast.success('Регестрації пройшла успішно!')
+      toast.success('Акаунт створено! Перевірте пошту та підтвердьте адресу.')
       reset()
       onSuccessCallback()
     },

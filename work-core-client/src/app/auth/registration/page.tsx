@@ -28,7 +28,7 @@ const Page = () => {
   const router = useRouter()
 
   const { mutate, isPending } = useRegistrationMutation(reset, setError, () =>
-    router.replace(PathConfig.DASHBOARD)
+    router.replace(PathConfig.LOGIN)
   )
 
   const onSubmit: SubmitHandler<IUserRegister> = (data: IUserRegister) => {

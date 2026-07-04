@@ -79,6 +79,7 @@ export class UserService {
     address?: string;
     role?: Role;
     avatar?: string;
+    isEmailVerified?: boolean;
   }) {
     const user = await this.prismaService.user.create({
       data: {
@@ -91,9 +92,27 @@ export class UserService {
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
         role: data.role,
         avatar: data.avatar,
+        ...(data.isEmailVerified !== undefined && {
+          isEmailVerified: data.isEmailVerified,
+        }),
       },
     });
     return plainToInstance(UserDto, user);
+  }
+
+  public async markEmailVerified(userId: number) {
+    return this.prismaService.user.update({
+      where: { id: userId },
+      data: { isEmailVerified: true },
+    });
+  }
+
+  public async updatePassword(userId: number, newPassword: string) {
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    return this.prismaService.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
   }
 
   public async updateUser(

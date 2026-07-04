@@ -22,9 +22,27 @@ export function useLoginMutation(
       reset()
       onSuccessCallback()
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, variables) => {
       if (axios.isAxiosError(error)) {
         const data = error.response?.data
+
+        // Пошта не підтверджена — пропонуємо надіслати лист повторно
+        if (error.response?.status === 403) {
+          toast.error(data?.message || 'Пошту не підтверджено.', {
+            duration: 6000,
+            action: {
+              label: 'Надіслати лист',
+              onClick: () => {
+                authService
+                  .resendVerification((variables as Inputs).email)
+                  .then(() => toast.success('Лист надіслано, перевірте пошту.'))
+                  .catch(() => toast.error('Не вдалося надіслати лист.'))
+              },
+            },
+          })
+          return
+        }
+
         if (Array.isArray(data?.errors)) {
           data.errors.forEach(
             (err: { field: keyof Inputs; message: string }) => {

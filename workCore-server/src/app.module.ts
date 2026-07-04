@@ -17,6 +17,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { ChatModule } from './chat/chat.module';
 import { ScheduleWishModule } from './schedule.wish/schedule.wish.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { ScheduleWishModule } from './schedule.wish/schedule.wish.module';
     TelegramModule,
     ChatModule,
     ScheduleWishModule,
+    MailModule,
   ],
   controllers: [],
   providers: [

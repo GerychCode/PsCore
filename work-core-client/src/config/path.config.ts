@@ -5,6 +5,8 @@ export enum PathConfig {
   REGISTER = '/auth/registration',
   LOGOUT = '/auth/logout',
   FORGOT_PASSWORD = '/auth/forgot-password',
+  RESET_PASSWORD = '/auth/reset-password',
+  VERIFY_EMAIL = '/auth/verify-email',
 
   DASHBOARD = '/dashboard',
   PROFILE = '/profile',
