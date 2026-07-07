@@ -6,6 +6,7 @@ import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { FileStorageService } from '../file.storage/file.starage.service';
+import { AdminBootstrapService } from './admin.bootstrap.service';
 import * as path from 'path';
 import IORedis from 'ioredis';
 
@@ -60,6 +61,7 @@ import IORedis from 'ioredis';
     UserService,
     PrismaService,
     FileStorageService,
+    AdminBootstrapService,
     {
       provide: 'REDIS_CLIENT',
       useFactory: (configService: ConfigService) => {

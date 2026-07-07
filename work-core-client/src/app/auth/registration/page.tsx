@@ -1,112 +1,154 @@
 'use client'
 
-import React from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import InputComponent from '@/app/components/forms/InputComponent'
 import { SubmitHandler, useForm } from 'react-hook-form'
 import Link from 'next/link'
-import { IUserRegister } from '@/interface/IUserAuth'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { PathConfig } from '@/config/path.config'
-import { useRegistrationMutation } from '@/hooks/user/user.registration.mutation'
+import { invitationService, IInvitationInfo } from '@/service/invitation.service'
+import { toast } from 'sonner'
+import axios from 'axios'
 
-type Inputs = {
-  firstName: string
-  lastName: string
-  email: string
-  password: string
-}
+type Inputs = { password: string; confirm: string }
 
-const Page = () => {
+const InviteForm = () => {
+  const params = useSearchParams()
+  const token = params.get('token') ?? ''
+  const router = useRouter()
+
+  const [info, setInfo] = useState<IInvitationInfo | null>(null)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'invalid'>(
+    'loading'
+  )
+  const [isPending, setIsPending] = useState(false)
+
   const {
     register,
     handleSubmit,
-    reset,
-    setError,
+    watch,
     formState: { errors },
   } = useForm<Inputs>()
 
-  const router = useRouter()
+  useEffect(() => {
+    if (!token) {
+      setStatus('invalid')
+      return
+    }
+    invitationService
+      .getByToken(token)
+      .then((res) => {
+        setInfo(res.data)
+        setStatus('ready')
+      })
+      .catch(() => setStatus('invalid'))
+  }, [token])
 
-  const { mutate, isPending } = useRegistrationMutation(reset, setError, () =>
-    router.replace(PathConfig.LOGIN)
-  )
+  const onSubmit: SubmitHandler<Inputs> = async (data) => {
+    setIsPending(true)
+    try {
+      await invitationService.accept(token, data.password)
+      toast.success('Реєстрацію завершено! Тепер увійдіть.')
+      router.replace(PathConfig.LOGIN)
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.message ||
+          error.response?.data?.errors?.[0]?.message
+        : null
+      toast.error(message || 'Не вдалося завершити реєстрацію.')
+    } finally {
+      setIsPending(false)
+    }
+  }
 
-  const onSubmit: SubmitHandler<IUserRegister> = (data: IUserRegister) => {
-    mutate(data)
+  if (status === 'loading') {
+    return <p className='text-gray-400'>Завантаження запрошення...</p>
+  }
+
+  if (status === 'invalid') {
+    return (
+      <div className='flex flex-col items-center gap-4 text-center'>
+        <div className='text-5xl'>⚠️</div>
+        <p className='text-gray-700'>
+          Запрошення недійсне або його час дії минув. Зверніться до
+          адміністратора.
+        </p>
+        <Link className='text-primary underline' href={PathConfig.LOGIN}>
+          До входу
+        </Link>
+      </div>
+    )
   }
 
   return (
-    <main className='bg-gray-100 min-h-screen w-full flex items-center justify-center p-4'>
-      <section className='w-full max-w-130 rounded-2xl mx-auto bg-white shadow-sm p-12 border-1 border-gray-50 flex flex-col items-center gap-6 p-6'>
-        <div className='flex flex-col items-center w-full gap-3'>
-          <h1 className='text-5xl font-bold text-center text-gray-900'>
-            Реєстрація
-          </h1>
-          <h3>WorkCore</h3>
-        </div>
-        <form
-          className='w-full flex flex-col items-center gap-5'
-          onSubmit={handleSubmit(onSubmit)}
-        >
-          <div className='flex flex-row gap-5 items-center justify-between'>
-            <InputComponent
-              {...register('firstName', {
-                required: 'Це поле є обов`язковим',
-              })}
-              errors={errors.firstName?.message}
-              type='text'
-              label='Ім`я'
-              placeholder='Ім`я'
-            />
-            <InputComponent
-              {...register('lastName', {
-                required: 'Це поле є обов`язковим',
-              })}
-              errors={errors.lastName?.message}
-              type='text'
-              label='Прізвище'
-              placeholder='Ім`я'
-            />
-          </div>
-          <InputComponent
-            {...register('email', {
-              required: 'Це поле є обов`язковим',
-              pattern: {
-                value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                message: 'Неправельний формат пошти!',
-              },
-            })}
-            name='email'
-            errors={errors.email?.message}
-            label='Email'
-            placeholder='printstudio.top@gmail.com'
-            ico='/email-svgrepo-com.svg'
-          ></InputComponent>
-          <InputComponent
-            {...register('password', {
-              required: 'Це поле є обов`язковим',
-            })}
-            errors={errors.password?.message}
-            type='password'
-            label='Password'
-            placeholder='Пароль'
-            ico='/password-svgrepo-com.svg'
-          ></InputComponent>
-          <button className='h-12 w-full rounded-2xl border-2 border-gray-200 p-3 bg-primary text-white text-base font-medium hover:opacity-95 hover:shadow-sm'>
-            {!isPending ? 'Зареєструватись' : 'Завантаження...'}
-          </button>
-          <p>
-            {' '}
-            Вже маєш аккаунт?
-            <Link className='text-primary underline' href={PathConfig.LOGIN}>
-              {' '}
-              Авторизація
-            </Link>
-          </p>
-        </form>
-      </section>
-    </main>
+    <form
+      className='w-full flex flex-col items-center gap-5'
+      onSubmit={handleSubmit(onSubmit)}
+    >
+      <p className='text-gray-500 text-sm text-center'>
+        Вітаємо, {info?.firstName} {info?.lastName}! Задайте пароль, щоб
+        завершити реєстрацію.
+      </p>
+
+      <div className='w-full flex flex-col gap-1'>
+        <label className='text-sm text-gray-600'>Email</label>
+        <input
+          value={info?.email ?? ''}
+          disabled
+          className='rounded-2xl border-2 border-gray-100 bg-gray-50 px-4 py-3 text-gray-500'
+        />
+      </div>
+
+      <InputComponent
+        {...register('password', {
+          required: 'Це поле є обов`язковим',
+          minLength: { value: 8, message: 'Мінімум 8 символів' },
+          pattern: {
+            value: /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).+$/,
+            message: 'Великі й малі літери та хоча б одна цифра',
+          },
+        })}
+        errors={errors.password?.message}
+        type='password'
+        label='Пароль'
+        placeholder='Пароль'
+        ico='/password-svgrepo-com.svg'
+      />
+      <InputComponent
+        {...register('confirm', {
+          required: 'Це поле є обов`язковим',
+          validate: (v) => v === watch('password') || 'Паролі не збігаються',
+        })}
+        errors={errors.confirm?.message}
+        type='password'
+        label='Повторіть пароль'
+        placeholder='Повторіть пароль'
+        ico='/password-svgrepo-com.svg'
+      />
+      <button
+        disabled={isPending}
+        className='h-12 w-full rounded-2xl border-2 border-gray-200 p-3 bg-primary text-white text-base font-medium hover:opacity-95 hover:shadow-sm disabled:opacity-50'
+      >
+        {isPending ? 'Завершуємо...' : 'Завершити реєстрацію'}
+      </button>
+    </form>
   )
 }
+
+const Page = () => (
+  <main className='bg-gray-100 min-h-screen w-full flex items-center justify-center p-4'>
+    <section className='w-full max-w-130 rounded-2xl mx-auto bg-white shadow-sm p-12 border-1 border-gray-50 flex flex-col items-center gap-6'>
+      <div className='flex flex-col items-center w-full gap-3'>
+        <h1 className='text-4xl font-bold text-center text-gray-900'>
+          Реєстрація
+        </h1>
+        <h3>WorkCore</h3>
+      </div>
+      <Suspense fallback={<p className='text-gray-400'>Завантаження...</p>}>
+        <InviteForm />
+      </Suspense>
+    </section>
+  </main>
+)
 
 export default Page

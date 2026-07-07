@@ -3,9 +3,9 @@ import { AuthController } from './auth.controller';
 describe('AuthController', () => {
   let controller: AuthController;
   let authService: {
-    create: jest.Mock;
     login: jest.Mock;
     logout: jest.Mock;
+    changePassword: jest.Mock;
     verifyEmail: jest.Mock;
     resendVerification: jest.Mock;
     forgotPassword: jest.Mock;
@@ -14,9 +14,9 @@ describe('AuthController', () => {
 
   beforeEach(() => {
     authService = {
-      create: jest.fn().mockResolvedValue({ id: 1 }),
       login: jest.fn().mockResolvedValue({ id: 1 }),
       logout: jest.fn().mockResolvedValue(undefined),
+      changePassword: jest.fn().mockResolvedValue({ message: 'ok' }),
       verifyEmail: jest.fn().mockResolvedValue({ message: 'ok' }),
       resendVerification: jest.fn().mockResolvedValue({ message: 'ok' }),
       forgotPassword: jest.fn().mockResolvedValue({ message: 'ok' }),
@@ -25,11 +25,16 @@ describe('AuthController', () => {
     controller = new AuthController(authService as any);
   });
 
-  it('register делегує до authService.create', async () => {
-    const req = {} as any;
-    const dto = { email: 'a@a.com' } as any;
-    await controller.create(req, dto);
-    expect(authService.create).toHaveBeenCalledWith(req, dto);
+  it('changePassword делегує до authService', async () => {
+    await controller.changePassword(5, {
+      currentPassword: 'a',
+      newPassword: 'NewPass123',
+    } as any);
+    expect(authService.changePassword).toHaveBeenCalledWith(
+      5,
+      'a',
+      'NewPass123',
+    );
   });
 
   it('login делегує до authService.login', async () => {

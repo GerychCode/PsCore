@@ -6,7 +6,6 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import {UserService} from "../user/user.service";
-import {CreateUserDto} from "./dto/registration.dto";
 import {User} from "../../generated/prisma";
 import {Request, Response} from "express";
 import {UserLoginDto} from "./dto/login.dto";
@@ -16,7 +15,6 @@ import {ConfigService} from "@nestjs/config";
 import { Redis } from 'ioredis';
 import {UserDto} from "../user/dto/user.dto";
 import { MailService } from '../mail/mail.service';
-import { RolesService } from '../roles/roles.service';
 
 const VERIFY_PREFIX = 'verify-email:';
 const RESET_PREFIX = 'password-reset:';
@@ -30,7 +28,6 @@ export class AuthService {
       private userService: UserService,
       private configService: ConfigService,
       private readonly mailService: MailService,
-      private readonly rolesService: RolesService,
       @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
   ) {}
 
@@ -38,29 +35,22 @@ export class AuthService {
     return randomBytes(32).toString('hex');
   }
 
-  async create(req: Request, createUserDto: CreateUserDto){
-    const isExistEmail = await this.userService.findByEmail(createUserDto.email);
-    if(isExistEmail){
-      throw new BadRequestException("Пошта вже використовується");
-    }
+  async changePassword(
+    userId: number,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.userService.findByIdRaw(userId);
+    if (!user) throw new BadRequestException('Користувача не знайдено.');
 
-    const newUser = await this.userService.create({
-      firstName: createUserDto.firstName,
-      lastName: createUserDto.lastName,
-      email: createUserDto.email,
-      password: createUserDto.password,
-      isEmailVerified: false,
-    })
+    const valid =
+      !!user.passwordHash &&
+      bcrypt.compareSync(currentPassword, user.passwordHash);
+    if (!valid) throw new BadRequestException('Поточний пароль невірний.');
 
-    // Кожен новий користувач одразу отримує дефолтну роль
-    await this.rolesService.assignDefaultRole(newUser.id);
-    await this.issueVerification(newUser.id, createUserDto.email);
-
-    // Без автологіну — спершу підтвердження пошти
-    return {
-      message:
-        'Акаунт створено. Перевірте пошту та підтвердьте адресу, щоб увійти.',
-    };
+    await this.userService.updatePassword(userId, newPassword);
+    await this.userService.clearMustChangePassword(userId);
+    return { message: 'Пароль оновлено.' };
   }
 
   private async issueVerification(userId: number, email: string) {

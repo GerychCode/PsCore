@@ -19,6 +19,7 @@ import { ChatModule } from './chat/chat.module';
 import { ScheduleWishModule } from './schedule.wish/schedule.wish.module';
 import { MailModule } from './mail/mail.module';
 import { RolesModule } from './roles/roles.module';
+import { InvitationsModule } from './invitations/invitations.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { RolesModule } from './roles/roles.module';
     ScheduleWishModule,
     MailModule,
     RolesModule,
+    InvitationsModule,
   ],
   controllers: [],
   providers: [

@@ -69,6 +69,18 @@ export class UserService {
     });
   }
 
+  /** Сирий запис користувача (з passwordHash) — для звірки пароля. */
+  public findByIdRaw(id: number) {
+    return this.prismaService.user.findUnique({ where: { id } });
+  }
+
+  public clearMustChangePassword(userId: number) {
+    return this.prismaService.user.update({
+      where: { id: userId },
+      data: { mustChangePassword: false },
+    });
+  }
+
   /** Користувач із призначеними ролями (без хешу пароля) — для гардів прав. */
   public async findByIdWithRoles(id: number) {
     const user = await this.prismaService.user.findUnique({

@@ -72,6 +72,20 @@ export class MailService implements OnModuleInit {
     );
   }
 
+  async sendInvitationEmail(to: string, token: string, name?: string) {
+    const link = `${this.clientUrl()}/auth/register?token=${token}`;
+    await this.send(
+      to,
+      'Запрошення до WorkCore',
+      `<p>${name ? `Вітаємо, ${name}!` : 'Вітаємо!'}</p>
+       <p>Вас запросили приєднатися до WorkCore. Завершіть реєстрацію
+       (задайте пароль) за посиланням:</p>
+       <p><a href="${link}">${link}</a></p>
+       <p>Посилання дійсне 7 днів.</p>`,
+      link,
+    );
+  }
+
   async sendPasswordResetEmail(to: string, token: string) {
     const link = `${this.clientUrl()}/auth/reset-password?token=${token}`;
     await this.send(

@@ -23,6 +23,8 @@ model User {
   // Дефолт true, щоб наявні користувачі не залишились незапідтвердженими;
   // реєстрація явно ставить false і вимагає підтвердження пошти
   isEmailVerified Boolean  @default(true) @map("is_email_verified")
+  // Примусова зміна пароля при першому вході (сіданий суперадмін)
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   dateOfBirth  DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt

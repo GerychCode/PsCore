@@ -16,6 +16,7 @@ export interface IUser {
   email: string
   role: 'Admin' | 'Manager' | 'Employe'
   baseLevel?: number
+  mustChangePassword?: boolean
   dateOfBirth?: string
   phone?: string
   address?: string

@@ -79,17 +79,8 @@ const Page = () => {
           <button className='h-12 w-full rounded-2xl border-2 border-gray-200 p-3 bg-primary text-white text-base font-medium hover:opacity-95 hover:shadow-sm'>
             {!isPending ? 'Увійти' : 'Завантаження...'}
           </button>
-          <p>
-            {' '}
-            Ще не маєте свого аккаунту?
-            <Link
-              className='text-primary underline'
-              href={PathConfig.REGISTER}
-              type='submit'
-            >
-              {' '}
-              Зареєструйся
-            </Link>
+          <p className='text-sm text-gray-400 text-center'>
+            Реєстрація доступна лише за запрошенням від адміністратора.
           </p>
         </form>
       </section>

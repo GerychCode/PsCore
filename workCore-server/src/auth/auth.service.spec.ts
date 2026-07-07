@@ -9,7 +9,6 @@ import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
-import { RolesService } from '../roles/roles.service';
 
 jest.mock('bcrypt');
 
@@ -20,12 +19,13 @@ describe('AuthService', () => {
     create: jest.Mock;
     markEmailVerified: jest.Mock;
     updatePassword: jest.Mock;
+    findByIdRaw: jest.Mock;
+    clearMustChangePassword: jest.Mock;
   };
   let mailService: {
     sendVerificationEmail: jest.Mock;
     sendPasswordResetEmail: jest.Mock;
   };
-  let rolesService: { assignDefaultRole: jest.Mock };
   let redis: {
     set: jest.Mock;
     get: jest.Mock;
@@ -48,12 +48,13 @@ describe('AuthService', () => {
       create: jest.fn(),
       markEmailVerified: jest.fn(),
       updatePassword: jest.fn(),
+      findByIdRaw: jest.fn(),
+      clearMustChangePassword: jest.fn(),
     };
     mailService = {
       sendVerificationEmail: jest.fn(),
       sendPasswordResetEmail: jest.fn(),
     };
-    rolesService = { assignDefaultRole: jest.fn() };
     redis = {
       set: jest.fn(),
       get: jest.fn(),
@@ -75,7 +76,6 @@ describe('AuthService', () => {
           useValue: { getOrThrow: jest.fn().mockReturnValue('session') },
         },
         { provide: MailService, useValue: mailService },
-        { provide: RolesService, useValue: rolesService },
         { provide: 'REDIS_CLIENT', useValue: redis },
       ],
     }).compile();
@@ -85,36 +85,22 @@ describe('AuthService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  describe('create', () => {
-    const dto = {
-      firstName: 'Іван',
-      lastName: 'Петренко',
-      email: 'ivan@example.com',
-      password: 'secret',
-    } as any;
-
-    it('кидає помилку, якщо пошта вже використовується', async () => {
-      userService.findByEmail.mockResolvedValue({ id: 1 });
-      await expect(service.create(buildReq(), dto)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(userService.create).not.toHaveBeenCalled();
+  describe('changePassword', () => {
+    it('змінює пароль при вірному поточному й скидає прапорець', async () => {
+      userService.findByIdRaw.mockResolvedValue({ id: 5, passwordHash: 'h' });
+      (bcrypt.compareSync as jest.Mock).mockReturnValue(true);
+      await service.changePassword(5, 'OldPass1', 'NewPass123');
+      expect(userService.updatePassword).toHaveBeenCalledWith(5, 'NewPass123');
+      expect(userService.clearMustChangePassword).toHaveBeenCalledWith(5);
     });
 
-    it('створює непідтвердженого користувача й надсилає лист, без автологіну', async () => {
-      userService.findByEmail.mockResolvedValue(null);
-      userService.create.mockResolvedValue({ id: 5 });
-      const req = buildReq();
-      await service.create(req, dto);
-      expect(userService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ isEmailVerified: false }),
-      );
-      expect(mailService.sendVerificationEmail).toHaveBeenCalledWith(
-        dto.email,
-        expect.any(String),
-      );
-      // Сесія НЕ зберігається — спершу підтвердження пошти
-      expect(req.session.userId).toBeUndefined();
+    it('кидає помилку при невірному поточному паролі', async () => {
+      userService.findByIdRaw.mockResolvedValue({ id: 5, passwordHash: 'h' });
+      (bcrypt.compareSync as jest.Mock).mockReturnValue(false);
+      await expect(
+        service.changePassword(5, 'wrong', 'NewPass123'),
+      ).rejects.toThrow(BadRequestException);
+      expect(userService.updatePassword).not.toHaveBeenCalled();
     });
   });
 

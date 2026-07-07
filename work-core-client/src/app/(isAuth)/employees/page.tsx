@@ -15,12 +15,17 @@ import {
 } from '@/service/employee.level.service'
 import { userService } from '@/service/user.service'
 import { rolesService } from '@/service/roles.service'
+import InviteModal from '@/app/(isAuth)/employees/Invite.Modal'
+import { FaUserPlus } from 'react-icons/fa'
+import { useState } from 'react'
 
 const Page = () => {
   const user = userStore((state) => state.user)
   const isAdmin = userStore((state) => state.isAdmin)
   const hasPermission = userStore((state) => state.hasPermission)
   const canManageRoles = hasPermission('MANAGE_ROLES')
+  const canInvite = hasPermission('MANAGE_USERS')
+  const [isInviteOpen, setIsInviteOpen] = useState(false)
   const { mutate: fetchUsers, isPending, users } = useGetUserListMutation()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -63,6 +68,16 @@ const Page = () => {
 
   return (
       <div className='p-4 sm:p-6'>
+        {canInvite && (
+          <div className='flex justify-end mb-5'>
+            <button
+              onClick={() => setIsInviteOpen(true)}
+              className='flex items-center gap-2 rounded-xl bg-primary text-white px-4 py-2.5 text-sm font-medium shadow-sm hover:opacity-90'
+            >
+              <FaUserPlus /> Запросити співробітника
+            </button>
+          </div>
+        )}
         {isPending && (
             <p className='text-gray-500 text-center'>Завантаження користувачів...</p>
         )}
@@ -83,6 +98,14 @@ const Page = () => {
               />
           ))}
         </div>
+
+        {isInviteOpen && (
+          <InviteModal
+            isOpen={isInviteOpen}
+            onClose={() => setIsInviteOpen(false)}
+            onInvited={() => fetchUsers()}
+          />
+        )}
       </div>
   )
 }

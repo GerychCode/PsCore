@@ -11,6 +11,7 @@ export class UserDto {
   @Expose() dateOfBirth: Date;
   @Expose() role: string;
   @Expose() baseLevel: number;
+  @Expose() mustChangePassword: boolean;
 
   @Exclude()
   passwordHash: string;

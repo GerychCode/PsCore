@@ -12,6 +12,7 @@ import { axiosClassic } from '@/api/interceptors'
 
 import { useWebSockets } from '@/hooks/useWebSockets'
 import { chatStore } from '@/store/chat.store'
+import ForcePasswordChange from '@/app/components/user/ForcePasswordChange'
 
 export interface AppNotification {
   id: number
@@ -115,6 +116,9 @@ export default function Layout({
 
   return (
     <main className='flex flex-row w-full h-full'>
+      {userData?.mustChangePassword && (
+        <ForcePasswordChange onDone={() => mutate()} />
+      )}
       <Sidebar collapsed={sideBarIsCollapsed} />
       <section className='flex flex-col w-full z-0'>
         <div className='h-full max-h-20 w-full flex justify-between items-center p-5'>
