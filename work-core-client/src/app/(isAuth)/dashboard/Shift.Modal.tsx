@@ -25,7 +25,7 @@ interface ShiftModalProps {
   users: IUser[]
   availableTags?: ITag[]
   onManageTags?: () => void
-} //
+}
 
 const ShiftModal: React.FC<ShiftModalProps> = ({
   isOpen,
@@ -41,7 +41,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
   const user = userStore((state) => state.user)
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<
-    IShiftCreate & { status?: string; tagIds?: string[] } // Використовуємо string[]
+    IShiftCreate & { status?: string; tagIds?: string[] }
   >()
 
   useEffect(() => {
@@ -53,7 +53,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
         endTime: shift.endTime,
         userId: shift.userId,
         status: shift.status,
-        tagIds: shift.tags?.map((t) => String(t.id)) || [], // Перетворюємо в рядок
+        tagIds: shift.tags?.map((t) => String(t.id)) || [],
       })
     } else {
       reset({
@@ -247,7 +247,6 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
                   </span>
                 )}
 
-                {/* Кнопка "+" в кінці списку, видима тільки для Admin */}
                 {isAdmin && (
                   <button
                     type='button'
@@ -277,7 +276,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
           )}
         </form>
       </div>
-    </MyModal> //
+    </MyModal>
   )
 }
 

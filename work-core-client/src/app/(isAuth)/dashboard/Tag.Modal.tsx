@@ -22,11 +22,10 @@ const TagModal: React.FC<TagModalProps> = ({ isOpen, onClose }) => {
     defaultValues: { severity: 1 },
   })
 
-  // Використовуємо наші мутації
   const { mutate: createTag, isPending: isCreating } = useCreateTagMutation(
     reset,
     setError,
-    () => {} // Функція після успіху (форма сама очиститься завдяки reset)
+    () => {}
   )
 
   const { mutate: deleteTag } = useDeleteTagMutation()
@@ -54,7 +53,6 @@ const TagModal: React.FC<TagModalProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Форма створення нового тегу */}
         <form
           onSubmit={handleSubmit(onSubmit)}
           className='flex flex-col gap-4 p-4 border-2 border-gray-100 rounded-2xl bg-gray-50'
@@ -92,7 +90,6 @@ const TagModal: React.FC<TagModalProps> = ({ isOpen, onClose }) => {
           </button>
         </form>
 
-        {/* Список існуючих тегів */}
         <div className='flex flex-col gap-3'>
           <h2 className='text-lg font-medium'>Існуючі теги</h2>
           {isLoading ? (

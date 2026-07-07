@@ -100,7 +100,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           className='w-full flex flex-col gap-7'
           onSubmit={handleSubmit(onSubmit)}
         >
-          {/* Header */}
           <div className='flex flex-row items-center justify-between'>
             <div className='flex flex-col'>
               <h1 className='text-2xl font-semibold text-black'>
@@ -132,9 +131,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             </div>
           </div>
 
-          {/* Body */}
           <div className='flex flex-col gap-5'>
-            {/* User Selection (Admin Only) */}
             {isAdmin && (
               <div className='flex flex-col gap-3'>
                 <div className='flex flex-row gap-2 items-center'>
@@ -156,7 +153,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
               </div>
             )}
 
-            {/* Date and Status Section */}
             <div className='flex flex-col gap-3'>
               <div className='flex flex-row gap-2 items-center'>
                 <FaCalendarDay className='text-xl text-primary' />
@@ -188,7 +184,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
               </div>
             </div>
 
-            {/* Time Section */}
             {!isDayOff && (
               <div className='flex flex-col gap-3'>
                 <div className='flex flex-row gap-2 items-center'>
@@ -213,7 +208,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             )}
           </div>
 
-          {/* Footer */}
           {isEditMode && (
             <div className='flex justify-start'>
               <button

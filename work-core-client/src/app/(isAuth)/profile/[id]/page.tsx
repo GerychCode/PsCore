@@ -10,7 +10,6 @@ import ProfileModal from '@/app/(isAuth)/profile/Profile.Modal'
 import { useQuery } from '@tanstack/react-query'
 import { userService } from '@/service/user.service'
 
-// Імпортуємо розбиті модулі замість одного загального компонента
 import {
   StatsKpiCards,
   MonthlyHoursChart,
@@ -31,7 +30,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  // Отримуємо статистику
   const { data: statsResponse, isLoading: isStatsLoading } = useQuery({
     queryKey: ['user-stats', id],
     queryFn: () => userService.getUserStatistics(id),
@@ -42,7 +40,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <div className='flex flex-col w-full gap-5'>
-      {/* 1. ШАПКА: User Info Card */}
       <div className='flex h-auto w-full rounded-2xl shadow-xs border-1 border-secondary/10 p-6 gap-5 justify-between bg-white'>
         <div className='flex items-center gap-5'>
           <Avatar avatar={user?.avatar} size={8} />
@@ -64,9 +61,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         )}
       </div>
 
-      {/* 2. РЯДОК: Загальна інфа + KPI Картки */}
       <div className='grid grid-cols-1 xl:grid-cols-4 gap-5 items-stretch'>
-        {/* General Info Card */}
         <div className='flex flex-col h-full w-full rounded-2xl shadow-xs border-1 border-secondary/10 p-6 gap-3 bg-white xl:col-span-1'>
           <h4 className='font-semibold text-black text-xl mb-2'>
             Загальна інформація
@@ -91,7 +86,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
           </p>
         </div>
 
-        {/* KPI Cards */}
         <div className='xl:col-span-3 h-full'>
           {isStatsLoading ? (
             <div className='flex h-full w-full items-center justify-center rounded-2xl shadow-xs border-1 border-secondary/10 p-6 bg-white'>
@@ -111,7 +105,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         </div>
       </div>
 
-      {/* 3. РЯДОК: Графіки */}
       {stats && (
         <div className='grid grid-cols-1 xl:grid-cols-4 gap-5 items-stretch'>
           <div className='xl:col-span-3 h-full'>
@@ -123,7 +116,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         </div>
       )}
 
-      {/* Модалка */}
       {isOwner && (
         <ProfileModal
           isModalOpen={isModalOpen}

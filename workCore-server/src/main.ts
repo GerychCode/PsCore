@@ -72,7 +72,6 @@ async function bootstrap() {
   const port = config.getOrThrow<number>('APPLICATION_PORT') ?? 3000;
   await app.listen(port);
 
-  // Выводим сообщение об успешном старте
   logger.log(`Application is running on: http://localhost:${port}`);
 }
 bootstrap();

@@ -10,9 +10,9 @@ import { FaCheck, FaCircle, FaFilter, FaTimes, FaTrash } from 'react-icons/fa'
 import { userStore } from '@/store/user.store'
 import ShiftModal from './Shift.Modal'
 import TagModal from './Tag.Modal'
+import ReportModal from './Report.Modal'
 import { useGetDepartmentListMutation } from '@/hooks/department/use-get-department-list.mutation'
 import { useGetUserListMutation } from '@/hooks/user/get.user.list.mutation'
-import MyModal from '@/app/components/Modal'
 import Avatar from '@/app/components/user/Avatar'
 import { useDeleteShiftMutation } from '@/hooks/shift/use-shifts.mutations'
 import { useGetTagsQuery } from '@/hooks/shift.tag/get.tags.query'
@@ -423,72 +423,16 @@ const ShiftPage = () => {
       )}
 
       {isReportModalOpen && (
-        <MyModal
+        <ReportModal
           isOpen={isReportModalOpen}
           onClose={() => setIsReportModalOpen(false)}
-        >
-          <div className='p-8 flex flex-col items-center gap-6 text-center max-w-sm mx-auto'>
-            <div className='w-16 h-16 bg-blue-50 text-primary rounded-full flex items-center justify-center text-2xl'>
-              <IoMdDocument />
-            </div>
-            <div>
-              <h2 className='text-xl font-bold text-gray-900 mb-2'>
-                Експорт звіту
-              </h2>
-              <p className='text-gray-500 text-sm leading-relaxed'>
-                Тут ви зможете згенерувати PDF або Excel звіт по годинах
-                співробітників за обраний період.
-              </p>
-            </div>
-
-            <div className='w-full p-4 bg-gray-50 rounded-xl text-left text-xs space-y-2 border border-gray-100 text-gray-600'>
-              <div className='flex justify-between'>
-                <span>Період:</span>{' '}
-                <span className='font-medium text-gray-900'>
-                  {months[selectedMonth]} {selectedYear}
-                </span>
-              </div>
-              {selectedDepartmentId && (
-                <div className='flex justify-between'>
-                  <span>Відділення:</span>{' '}
-                  <span className='font-medium text-gray-900'>
-                    {
-                      departments?.find(
-                        (d) => d.id === Number(selectedDepartmentId)
-                      )?.name
-                    }
-                  </span>
-                </div>
-              )}
-              {isAdmin && selectedUserId && (
-                <div className='flex justify-between'>
-                  <span>Співробітник:</span>{' '}
-                  <span className='font-medium text-gray-900'>
-                    {
-                      users?.find((u) => u.id === Number(selectedUserId))
-                        ?.firstName
-                    }
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className='flex gap-3 w-full'>
-              <button
-                onClick={() => setIsReportModalOpen(false)}
-                className='flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium text-sm'
-              >
-                Скасувати
-              </button>
-              <button
-                onClick={() => setIsReportModalOpen(false)}
-                className='flex-1 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 font-medium text-sm shadow-sm'
-              >
-                Завантажити
-              </button>
-            </div>
-          </div>
-        </MyModal>
+          shifts={shifts || []}
+          departments={departments || []}
+          users={users || []}
+          defaultMonth={selectedMonth}
+          defaultYear={selectedYear}
+          defaultUserId={selectedUserId || undefined}
+        />
       )}
     </div>
   )

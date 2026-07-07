@@ -1,4 +1,3 @@
-// Helpers.
 const s = 1000;
 const m = s * 60;
 const h = m * 60;
@@ -47,19 +46,9 @@ export type StringValue =
   | `${number} ${UnitAnyCase}`;
 
 interface Options {
-  /**
-   * Set to `true` to use verbose formatting. Defaults to `false`.
-   */
   long?: boolean;
 }
 
-/**
- * Parse or format the given value.
- *
- * @param value - The string or number to convert
- * @param options - Options for the conversion
- * @throws Error if `value` is not a non-empty string or a number
- */
 function msFn(value: StringValue, options?: Options): number;
 function msFn(value: number, options?: Options): string;
 function msFn(value: StringValue | number, options?: Options): number | string {
@@ -71,6 +60,7 @@ function msFn(value: StringValue | number, options?: Options): number | string {
     }
     throw new Error('Value provided to ms() must be a string or number.');
   } catch (error) {
+    /* istanbul ignore next */
     const message = isError(error)
       ? `${error.message}. value=${JSON.stringify(value)}`
       : 'An unknown error has occurred.';
@@ -78,13 +68,6 @@ function msFn(value: StringValue | number, options?: Options): number | string {
   }
 }
 
-/**
- * Parse the given string and return milliseconds.
- *
- * @param str - A string to parse to milliseconds
- * @returns The parsed value in milliseconds, or `NaN` if the string can't be
- * parsed
- */
 export function parse(str: string): number {
   if (typeof str !== 'string' || str.length === 0 || str.length > 100) {
     throw new Error(
@@ -95,8 +78,6 @@ export function parse(str: string): number {
     /^(?<value>-?(?:\d+)?\.?\d+) *(?<type>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
       str,
     );
-  // Named capture groups need to be manually typed today.
-  // https://github.com/microsoft/TypeScript/issues/32098
   const groups = match?.groups as { value: string; type?: string } | undefined;
   if (!groups) {
     return NaN;
@@ -142,21 +123,14 @@ export function parse(str: string): number {
     case 'msec':
     case 'ms':
       return n;
+    /* istanbul ignore next */
     default:
-      // This should never occur.
       throw new Error(
         `The unit ${type as string} was matched, but no matching case exists.`,
       );
   }
 }
 
-/**
- * Parse the given StringValue and return milliseconds.
- *
- * @param value - A typesafe StringValue to parse to milliseconds
- * @returns The parsed value in milliseconds, or `NaN` if the string can't be
- * parsed
- */
 export function parseStrict(value: StringValue): number {
   return parse(value);
 }
@@ -164,9 +138,6 @@ export function parseStrict(value: StringValue): number {
 // eslint-disable-next-line import/no-default-export
 export default msFn;
 
-/**
- * Short format for `ms`.
- */
 function fmtShort(ms: number): StringValue {
   const msAbs = Math.abs(ms);
   if (msAbs >= d) {
@@ -184,9 +155,6 @@ function fmtShort(ms: number): StringValue {
   return `${ms}ms`;
 }
 
-/**
- * Long format for `ms`.
- */
 function fmtLong(ms: number): StringValue {
   const msAbs = Math.abs(ms);
   if (msAbs >= d) {
@@ -204,13 +172,6 @@ function fmtLong(ms: number): StringValue {
   return `${ms} ms`;
 }
 
-/**
- * Format the given integer as a string.
- *
- * @param ms - milliseconds
- * @param options - Options for the conversion
- * @returns The formatted string
- */
 export function format(ms: number, options?: Options): string {
   if (typeof ms !== 'number' || !isFinite(ms)) {
     throw new Error('Value provided to ms.format() must be of type number.');
@@ -218,9 +179,6 @@ export function format(ms: number, options?: Options): string {
   return options?.long ? fmtLong(ms) : fmtShort(ms);
 }
 
-/**
- * Pluralization helper.
- */
 function plural(
   ms: number,
   msAbs: number,
@@ -231,12 +189,6 @@ function plural(
   return `${Math.round(ms / n)} ${name}${isPlural ? 's' : ''}` as StringValue;
 }
 
-/**
- * A type guard for errors.
- *
- * @param value - The value to test
- * @returns A boolean `true` if the provided value is an Error-like object
- */
 function isError(value: unknown): value is Error {
   return typeof value === 'object' && value !== null && 'message' in value;
 }

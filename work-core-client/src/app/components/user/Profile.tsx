@@ -1,4 +1,3 @@
-// src/app/components/user/Profile.tsx
 'use client'
 
 import React from 'react'

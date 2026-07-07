@@ -26,7 +26,7 @@ interface IInput {
     errors?: string | null
     placeholder?: string
     onSelect?: (date: any) => void
-    calendarPlacement?: 'top' | 'bottom' // Новий проп для керування позицією
+    calendarPlacement?: 'top' | 'bottom'
 }
 
 const InputComponent = React.forwardRef<HTMLInputElement, IInput>(
@@ -41,7 +41,7 @@ const InputComponent = React.forwardRef<HTMLInputElement, IInput>(
             errors = null,
             placeholder = '',
             onSelect,
-            calendarPlacement = 'bottom', // За замовчуванням вниз
+            calendarPlacement = 'bottom',
             ...inputProps
         },
         ref
@@ -106,11 +106,10 @@ const InputComponent = React.forwardRef<HTMLInputElement, IInput>(
             trailingIcon = <FaClock className='text-secondary text-xl hover:opacity-75' />
         }
 
-        // Класи для позиціонування календаря
         const calendarPositionClasses =
             calendarPlacement === 'top'
-                ? 'bottom-full mb-2' // Відкриваємо вгору
-                : 'top-full mt-2'    // Відкриваємо вниз
+                ? 'bottom-full mb-2'
+                : 'top-full mt-2'
 
         return (
             <section

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service'; // Перевірте шлях до PrismaService
+import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType } from '../../generated/prisma';
 import { EventsGateway } from '../events/events.gateway';
 import { TelegramService } from '../telegram/telegram.service';
@@ -30,10 +30,8 @@ export class NotificationsService {
       },
     });
 
-    // 3. Відправляємо на фронт через WebSocket
     this.eventsGateway.emitToUser(userId, 'new_notification', notification);
 
-    // 4. Дублюємо в Telegram через наш сервіс
     if (user?.telegramId) {
       let icon = 'ℹ️';
       if (data.type === 'SUCCESS') icon = '✅';

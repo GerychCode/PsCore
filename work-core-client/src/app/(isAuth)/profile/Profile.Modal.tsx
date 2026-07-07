@@ -179,7 +179,6 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
                 Аватарка профілю
               </h2>
             </div>
-            {/* Адаптація кнопок аватарки для мобільних */}
             <div className='flex flex-col sm:flex-row gap-3 items-center sm:items-start'>
               <Avatar
                 avatar={previewUrl || user?.avatar}
@@ -222,7 +221,6 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
               <IoMdPerson className='text-2xl text-primary'></IoMdPerson>
               <h2 className='text-md font-medium text-black'>Дані профілю</h2>
             </div>
-            {/* Адаптація полів імені та прізвища */}
             <div className='flex flex-col md:flex-row gap-5 items-center justify-between'>
               <InputComponent
                 {...register('firstName')}

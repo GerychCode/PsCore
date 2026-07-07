@@ -7,7 +7,7 @@ import { FiChevronRight } from 'react-icons/fi'
 interface SettingsRowProps {
     icon: IconType
     title: string
-    children: ReactNode // Для опису або статусу
+    children: ReactNode
     onClick?: () => void
     isClickable?: boolean
 }

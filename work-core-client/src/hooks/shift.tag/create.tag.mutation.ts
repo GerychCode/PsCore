@@ -19,7 +19,6 @@ export function useCreateTagMutation(
       toast.success('Тег успішно створено!')
       reset()
       onSuccessCallback()
-      // Оновлюємо список тегів
       queryClient.invalidateQueries({ queryKey: ['shift-tag'] })
     },
     onError: (error: unknown) => {

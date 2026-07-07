@@ -11,8 +11,6 @@ export default function Home() {
   const user = userStore((state) => state.user)
   const [isMounted, setIsMounted] = useState(false)
 
-  // Використовуємо useEffect, щоб переконатися, що код виконується на клієнті
-  // Це запобігає помилкам гідратації при роботі з localStorage
   useEffect(() => {
     setIsMounted(true)
   }, [])
@@ -33,7 +31,6 @@ export default function Home() {
               <span className='font-bold text-xl text-gray-900'>WorkCore</span>
             </div>
 
-            {/* Auth Buttons або Dashboard */}
             <div className='flex items-center gap-4'>
               {isMounted && user ? (
                 <Link
@@ -103,10 +100,8 @@ export default function Home() {
             </div>
           </div>
 
-          {/* --- FEATURES GRID --- */}
           <div className='mt-24 md:mt-32'>
             <div className='grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12'>
-              {/* Feature 1 */}
               <div className='flex flex-col items-center text-center p-6 rounded-3xl bg-gray-50 border border-gray-100 hover:border-primary/20 transition duration-300'>
                 <div className='flex items-center justify-center h-16 w-16 rounded-2xl bg-blue-100 text-primary mb-6'>
                   <FaCalendarAlt className='text-3xl' />
@@ -120,7 +115,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Feature 2 */}
               <div className='flex flex-col items-center text-center p-6 rounded-3xl bg-gray-50 border border-gray-100 hover:border-primary/20 transition duration-300'>
                 <div className='flex items-center justify-center h-16 w-16 rounded-2xl bg-purple-100 text-purple-600 mb-6'>
                   <IoMdTime className='text-4xl' />
@@ -134,7 +128,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Feature 3 */}
               <div className='flex flex-col items-center text-center p-6 rounded-3xl bg-gray-50 border border-gray-100 hover:border-primary/20 transition duration-300'>
                 <div className='flex items-center justify-center h-16 w-16 rounded-2xl bg-green-100 text-green-600 mb-6'>
                   <FaChartLine className='text-3xl' />
@@ -150,7 +143,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* --- CTA SECTION --- */}
           <div className='mt-24 md:mt-32 bg-primary rounded-3xl p-8 md:p-16 text-center text-white relative overflow-hidden mb-12'>
             <div className='relative z-10'>
               <h2 className='text-3xl font-bold mb-4'>
@@ -180,14 +172,12 @@ export default function Home() {
               )}
             </div>
 
-            {/* Decorative circles */}
             <div className='absolute top-0 left-0 -ml-10 -mt-10 w-40 h-40 bg-white/10 rounded-full blur-2xl'></div>
             <div className='absolute bottom-0 right-0 -mr-10 -mb-10 w-40 h-40 bg-white/10 rounded-full blur-2xl'></div>
           </div>
         </div>
       </main>
 
-      {/* --- FOOTER --- */}
       <footer className='bg-white border-t border-gray-100 py-8'>
         <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4'>
           <div className='flex items-center gap-2 opacity-75'>
