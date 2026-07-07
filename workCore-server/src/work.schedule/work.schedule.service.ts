@@ -22,8 +22,14 @@ import { CreateWorkScheduleDto } from './dto/create-work-schedule.dto';
 import { UpdateWorkScheduleDto } from './dto/update-work-schedule.dto';
 import { FilterWorkScheduleDto } from './dto/filter-work-schedule.dto';
 import { LockWeekDto } from './dto/lock-week.dto';
-import { Role, User } from '../../generated/prisma';
+import { User } from '../../generated/prisma';
 import { EventsGateway } from '../events/events.gateway';
+import { hasPermission } from '../common/permissions/permissions.util';
+import { Permission } from '../common/permissions/permission.enum';
+
+/** Чи може користувач керувати чужими графіками / генерувати / обходити лок. */
+const canManageSchedule = (user: User) =>
+  hasPermission(user as any, Permission.MANAGE_SCHEDULE);
 
 @Injectable()
 export class WorkScheduleService {
@@ -78,7 +84,7 @@ export class WorkScheduleService {
   }
 
   async createWorkSchedule(user: User, createDto: CreateWorkScheduleDto) {
-    if (user.role !== Role.Admin && user.id !== createDto.userId) {
+    if (!canManageSchedule(user) && user.id !== createDto.userId) {
       throw new ForbiddenException(
         'Ви можете створювати графік тільки для себе.',
       );
@@ -134,7 +140,7 @@ export class WorkScheduleService {
   ) {
     const existingSchedule = await this.getWorkScheduleById(id);
 
-    if (user.role !== Role.Admin && user.id !== existingSchedule.userId) {
+    if (!canManageSchedule(user) && user.id !== existingSchedule.userId) {
       throw new ForbiddenException('Ви можете редагувати тільки свій графік.');
     }
 
@@ -196,7 +202,7 @@ export class WorkScheduleService {
   async deleteWorkSchedule(user: User, id: number) {
     const existingSchedule = await this.getWorkScheduleById(id);
 
-    if (user.role !== Role.Admin && user.id !== existingSchedule.userId) {
+    if (!canManageSchedule(user) && user.id !== existingSchedule.userId) {
       throw new ForbiddenException('Ви можете видаляти тільки свій графік.');
     }
 
@@ -360,7 +366,7 @@ export class WorkScheduleService {
   }
 
   private async checkWeekLock(departmentId: number, date: Date, user: User) {
-    if (user.role === Role.Admin) return;
+    if (canManageSchedule(user)) return;
 
     const weekStart = startOfWeek(date, { weekStartsOn: 1 });
 

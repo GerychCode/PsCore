@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { sidebarMenuConfig } from '@/config/sidebar.menu'
 import { IconType } from 'react-icons'
+import { useEffect, useState } from 'react'
 import { chatStore } from '@/store/chat.store'
 import { userStore } from '@/store/user.store'
 import { PathConfig } from '@/config/path.config'
@@ -17,8 +18,14 @@ export function SidebarMenu({ collapsed }: SidebarMenuProps) {
     const unreadTotal = chatStore((state) => state.unreadTotal)
     const hasPermission = userStore((state) => state.hasPermission)
 
+    // Права зберігаються в localStorage (persist) → на SSR їх немає, а на
+    // клієнті вже є. Щоб уникнути hydration mismatch, гейтимо за правами
+    // лише після маунта: перший клієнтський рендер збігається з серверним.
+    const [mounted, setMounted] = useState(false)
+    useEffect(() => setMounted(true), [])
+
     const menuItems = sidebarMenuConfig.filter(
-        (item) => !item.permission || hasPermission(item.permission)
+        (item) => !item.permission || (mounted && hasPermission(item.permission))
     )
 
     return (

@@ -9,7 +9,7 @@ import DepartmentModal from '@/app/(isAuth)/departments/Department.Modal'
 import { IoMdAdd } from 'react-icons/io'
 
 const Page = () => {
-    const isAdmin = userStore((state) => state.isAdmin)
+    const isAdmin = userStore((state) => state.hasPermission('MANAGE_DEPARTMENTS'))
     const { mutate: fetchDepartments, isPending, departments } = useGetDepartmentListMutation()
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [selectedDepartment, setSelectedDepartment] = useState<IDepartment | null>(null)

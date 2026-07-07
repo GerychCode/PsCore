@@ -33,7 +33,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   onUpdate,
   users = [],
 }) => {
-  const isAdmin = userStore((state) => state.isAdmin)
+  const isAdmin = userStore((state) => state.hasPermission('MANAGE_SCHEDULE'))
   const isEditMode = 'id' in schedule
 
   const {

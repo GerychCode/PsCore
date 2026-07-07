@@ -46,7 +46,8 @@ const selectCls =
   'h-9 px-3 rounded-lg bg-[#181a20] border border-white/[0.08] text-sm text-white/80 focus:outline-none focus:border-orange-500/50 cursor-pointer'
 
 const ShiftPage = () => {
-  const isAdmin = userStore((state) => state.isAdmin)
+  // «Адмінські» дії дашборду = право керувати всіма змінами
+  const isAdmin = userStore((state) => state.hasPermission('APPROVE_SHIFTS'))
 
   const { mutate: fetchShifts, shift: shifts } = useGetShiftListMutation()
   const { mutate: fetchDepartments, departments } =

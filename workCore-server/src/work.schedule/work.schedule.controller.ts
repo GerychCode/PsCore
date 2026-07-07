@@ -15,10 +15,11 @@ import { Authorization } from '../common/decorator/auth.decorator';
 import { Authorized } from '../common/decorator/authorized.decorator';
 import { RequirePermissions } from '../common/permissions/permissions.decorator';
 import { Permission } from '../common/permissions/permission.enum';
+import { hasPermission } from '../common/permissions/permissions.util';
 import { CreateWorkScheduleDto } from './dto/create-work-schedule.dto';
 import { UpdateWorkScheduleDto } from './dto/update-work-schedule.dto';
 import { FilterWorkScheduleDto } from './dto/filter-work-schedule.dto';
-import { Role, User } from '../../generated/prisma';
+import { User } from '../../generated/prisma';
 import { WeekViewQueryDto } from './dto/week-view-query.dto';
 import { LockWeekDto } from './dto/lock-week.dto';
 import { GenerateWeekDto } from './dto/generate-week.dto';
@@ -41,7 +42,7 @@ export class WorkScheduleController {
   getWeekView(@Authorized() user: User, @Query() query: WeekViewQueryDto) {
     return this.workScheduleService.getWeekView(
       query.date,
-      user.role === Role.Admin,
+      hasPermission(user as any, Permission.MANAGE_SCHEDULE),
     );
   }
 

@@ -36,7 +36,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({
   availableTags = [],
   onManageTags,
 }) => {
-  const isAdmin = userStore((state) => state.isAdmin)
+  const isAdmin = userStore((state) => state.hasPermission('APPROVE_SHIFTS'))
   const isEditMode = !!shift
   const user = userStore((state) => state.user)
 

@@ -49,7 +49,7 @@ const legendItems = [
 
 export default function Page() {
   const user = userStore((state) => state.user)
-  const isAdmin = userStore((state) => state.isAdmin)
+  const isAdmin = userStore((state) => state.hasPermission('MANAGE_SCHEDULE'))
   const [currentDate, setCurrentDate] = useState(new Date())
   // Дати ("сьогодні", межі тижня) залежать від таймзони: сервер (UTC) і браузер
   // можуть бачити різні дні → рендеримо календар лише на клієнті

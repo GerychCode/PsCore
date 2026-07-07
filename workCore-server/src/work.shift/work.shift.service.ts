@@ -8,13 +8,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkShiftDto } from './dto/create.work.shift.dto';
 import { endOfDay, parse, parseISO, startOfDay } from 'date-fns';
 import { DepartmentService } from '../department/department.service';
-import { $Enums, Role, User } from '../../generated/prisma';
+import { $Enums, User } from '../../generated/prisma';
 import ShiftStatus = $Enums.ShiftStatus;
 import NotificationType = $Enums.NotificationType;
 import { UpdateWorkShiftDto } from './dto/update.work.shift.dto.ts';
 import { FilterShiftDto } from './dto/shift.filter.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ShiftSessionService } from './shift.session.service';
+import { hasPermission } from '../common/permissions/permissions.util';
+import { Permission } from '../common/permissions/permission.enum';
+
+/** Чи може користувач діяти над чужими змінами / бачити всі. */
+const canManageAllShifts = (user: User) =>
+  hasPermission(user as any, Permission.APPROVE_SHIFTS);
 
 @Injectable()
 export class WorkShiftService {
@@ -26,8 +32,9 @@ export class WorkShiftService {
   ) {}
 
   async getWorkShifts(user: User, shiftFilterDto: FilterShiftDto) {
-    const userIdFilter =
-      user.role === Role.Admin ? shiftFilterDto.userId : user.id;
+    const userIdFilter = canManageAllShifts(user)
+      ? shiftFilterDto.userId
+      : user.id;
 
     const where: any = {
       ...(shiftFilterDto.id && { id: shiftFilterDto.id }),
@@ -103,7 +110,7 @@ export class WorkShiftService {
 
   async createWorkShift(user: User, createWorkShiftDto: CreateWorkShiftDto) {
     let targetUserId = user.id;
-    if (user.role === Role.Admin && createWorkShiftDto.userId) {
+    if (canManageAllShifts(user) && createWorkShiftDto.userId) {
       targetUserId = createWorkShiftDto.userId;
     }
 
@@ -148,7 +155,7 @@ export class WorkShiftService {
     );
 
     const status =
-      user.role === Role.Admin ? ShiftStatus.APPROVED : ShiftStatus.PENDING;
+      canManageAllShifts(user) ? ShiftStatus.APPROVED : ShiftStatus.PENDING;
 
     const newShift = await this.prismaService.workShift.create({
       data: {
@@ -177,7 +184,7 @@ export class WorkShiftService {
   ) {
     const existShift = await this.getWorkShiftById(id);
 
-    if (user.role !== Role.Admin && existShift.userId !== user.id) {
+    if (!canManageAllShifts(user) && existShift.userId !== user.id) {
       throw new ForbiddenException('Ви не можете редагувати чужі зміни!');
     }
 
@@ -187,7 +194,7 @@ export class WorkShiftService {
       );
     }
 
-    if (user.role !== Role.Admin) {
+    if (!canManageAllShifts(user)) {
       delete updateWorkShiftDto.status;
     }
 
@@ -304,13 +311,13 @@ export class WorkShiftService {
   async deleteShift(user: User, id: number) {
     const existEntry = await this.getWorkShiftById(id);
 
-    if (user.role !== Role.Admin && user.id !== existEntry.userId) {
+    if (!canManageAllShifts(user) && user.id !== existEntry.userId) {
       throw new ForbiddenException('Ви не можете видаляти чужі зміни!');
     }
 
     if (
       existEntry.status === ShiftStatus.APPROVED &&
-      user.role !== Role.Admin
+      !canManageAllShifts(user)
     ) {
       throw new ForbiddenException(
         'Заборонено редагувати підтверджений запис. Зверніться до адміністратора.',

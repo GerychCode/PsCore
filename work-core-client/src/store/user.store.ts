@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
 import { IUser } from '@/interface/IUser'
 
 interface UserStore {
@@ -14,28 +13,23 @@ interface UserStore {
 const computeIsAdmin = (user: IUser) =>
     user.role === 'Admin' || (user.permissions ?? []).includes('ADMINISTRATOR')
 
-export const userStore = create<UserStore>()(
-    persist(
-        (set, get) => ({
-            user: null,
-            isAdmin: false,
-            permissions: [],
-            updateUser: (user: IUser) =>
-                set(() => ({
-                    user,
-                    isAdmin: computeIsAdmin(user),
-                    permissions: user.permissions ?? [],
-                })),
-            hasPermission: (permission: string) => {
-                const state = get()
-                if (state.isAdmin) return true
-                return state.permissions.includes(permission)
-            },
-            logout: () => set({ user: null, isAdmin: false, permissions: [] }),
-        }),
-        {
-            name: 'workcore-user-storage',
-            storage: createJSONStorage(() => localStorage),
-        }
-    )
-)
+// Без persist: дані користувача (роль/права) підтягуються getUser при кожному
+// маунті layout. Persist давав hydration mismatch — на SSR прав немає, а в
+// localStorage вони вже є. Порожній старт на обох боках усуває розбіжність.
+export const userStore = create<UserStore>((set, get) => ({
+    user: null,
+    isAdmin: false,
+    permissions: [],
+    updateUser: (user: IUser) =>
+        set(() => ({
+            user,
+            isAdmin: computeIsAdmin(user),
+            permissions: user.permissions ?? [],
+        })),
+    hasPermission: (permission: string) => {
+        const state = get()
+        if (state.isAdmin) return true
+        return state.permissions.includes(permission)
+    },
+    logout: () => set({ user: null, isAdmin: false, permissions: [] }),
+}))

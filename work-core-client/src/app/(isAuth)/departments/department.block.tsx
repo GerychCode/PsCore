@@ -9,7 +9,7 @@ interface Props {
 }
 
 const DepartmentBlock = ({ department, onEdit }: Props) => {
-    const isAdmin = userStore((state) => state.isAdmin)
+    const isAdmin = userStore((state) => state.hasPermission('MANAGE_DEPARTMENTS'))
 
     return (
         <div
