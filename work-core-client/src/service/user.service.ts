@@ -33,6 +33,16 @@ class UserService {
     return await axiosClassic.post<{ code: string }>(`/user/telegram-code`)
   }
 
+  public async getNotificationPrefs() {
+    return await axiosClassic.get(`/user/notification-preferences`)
+  }
+
+  public async updateNotificationPrefs(preferences: unknown) {
+    return await axiosClassic.put(`/user/notification-preferences`, {
+      preferences,
+    })
+  }
+
   public async getUserStatistics(id: number, month?: number, year?: number) {
     return await axiosClassic.get(`/user/${id}/statistics`, {
       params: { month, year },

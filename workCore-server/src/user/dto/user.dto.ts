@@ -12,6 +12,7 @@ export class UserDto {
   @Expose() role: string;
   @Expose() baseLevel: number;
   @Expose() mustChangePassword: boolean;
+  @Expose() notificationPrefs: any;
 
   @Exclude()
   passwordHash: string;

@@ -5,10 +5,11 @@ import { ChatGateway } from './chat.gateway';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
 import { UserModule } from '../user/user.module';
+import { TelegramModule } from '../telegram/telegram.module';
 
 @Module({
-  // UserModule потрібен AuthGuard-у (@Authorization) в контролері
-  imports: [PrismaModule, EventsModule, UserModule],
+  // UserModule — для AuthGuard; TelegramModule — для дублювання чату в TG
+  imports: [PrismaModule, EventsModule, UserModule, TelegramModule],
   controllers: [ChatController],
   providers: [ChatService, ChatGateway],
 })

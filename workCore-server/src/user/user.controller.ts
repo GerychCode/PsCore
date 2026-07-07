@@ -30,6 +30,7 @@ import {
 import { $Enums, User } from '../../generated/prisma';
 import Role = $Enums.Role;
 import { UpdateUserDto, UpdateUserDtoAdmin } from './dto/update.user.dto';
+import { UpdateNotificationPrefsDto } from './dto/notification-prefs.dto';
 import { PasswordDto } from './dto/password.dto';
 import { IsNumber } from 'class-validator';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
@@ -68,6 +69,21 @@ export class UserController {
     return user;
   }
 
+  @Get('notification-preferences')
+  @Authorization()
+  public async getNotificationPrefs(@Authorized('id') userId: number) {
+    return this.userService.getNotificationPrefs(userId);
+  }
+
+  @Put('notification-preferences')
+  @Authorization()
+  public async updateNotificationPrefs(
+    @Authorized('id') userId: number,
+    @Body() dto: UpdateNotificationPrefsDto,
+  ) {
+    return this.userService.updateNotificationPrefs(userId, dto.preferences);
+  }
+
   @Post('telegram-code')
   @Authorization()
   public async generateTelegramCode(@Authorized('id') userId: number) {
@@ -79,7 +95,7 @@ export class UserController {
   @Authorization()
   @UseInterceptors(
     FileInterceptor('avatar', {
-      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+      limits: { fileSize: 10 * 1024 * 1024, files: 1 },
     }),
   )
   uploadFile(
@@ -87,7 +103,7 @@ export class UserController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
           new FileTypeValidator({ fileType: /^image\/(jpeg|png|webp|gif)$/ }),
         ],
       }),

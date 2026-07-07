@@ -2,6 +2,7 @@
 import React from 'react'
 import TelegramConnect from './TelegramConnect'
 import ThemeToggle from './ThemeToggle'
+import NotificationSettings from './NotificationSettings'
 
 export default function SettingsPage() {
     return (
@@ -18,6 +19,20 @@ export default function SettingsPage() {
 
                 <div className='flex flex-col'>
                     <TelegramConnect />
+                </div>
+            </div>
+
+            <div className='bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden'>
+                <div className='p-6 border-b border-gray-200'>
+                    <h2 className='text-xl font-bold text-gray-800 mb-1'>
+                        Сповіщення
+                    </h2>
+                    <p className='text-secondary'>
+                        Оберіть, що і куди надсилати.
+                    </p>
+                </div>
+                <div className='flex flex-col'>
+                    <NotificationSettings />
                 </div>
             </div>
 

@@ -3,6 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType } from '../../generated/prisma';
 import { EventsGateway } from '../events/events.gateway';
 import { TelegramService } from '../telegram/telegram.service';
+import {
+  NotificationCategory,
+  isChannelEnabled,
+} from './notification.prefs';
 
 @Injectable()
 export class NotificationsService {
@@ -14,32 +18,43 @@ export class NotificationsService {
 
   async createNotification(
     userId: number,
-    data: { title: string; message: string; type?: NotificationType },
+    data: {
+      title: string;
+      message: string;
+      type?: NotificationType;
+      category?: NotificationCategory;
+    },
   ) {
+    const category = data.category ?? 'shift';
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { telegramId: true },
+      select: { telegramId: true, notificationPrefs: true },
     });
+    const prefs = (user?.notificationPrefs as any) ?? null;
 
-    const notification = await this.prisma.notification.create({
-      data: {
-        userId,
-        title: data.title,
-        message: data.message,
-        type: data.type || 'INFO',
-      },
-    });
+    let notification: any = null;
 
-    this.eventsGateway.emitToUser(userId, 'new_notification', notification);
+    // Веб-канал (in-app дзвіночок) — лише якщо увімкнено для категорії
+    if (isChannelEnabled(prefs, category, 'web')) {
+      notification = await this.prisma.notification.create({
+        data: {
+          userId,
+          title: data.title,
+          message: data.message,
+          type: data.type || 'INFO',
+        },
+      });
+      this.eventsGateway.emitToUser(userId, 'new_notification', notification);
+    }
 
-    if (user?.telegramId) {
+    // Telegram-канал — незалежно від веб
+    if (user?.telegramId && isChannelEnabled(prefs, category, 'telegram')) {
       let icon = 'ℹ️';
       if (data.type === 'SUCCESS') icon = '✅';
       if (data.type === 'WARNING') icon = '⚠️';
       if (data.type === 'ERROR') icon = '❌';
 
       const tgMessage = `${icon} <b>${data.title}</b>\n\n${data.message}`;
-
       await this.telegramService.sendMessage(user.telegramId, tgMessage);
     }
 

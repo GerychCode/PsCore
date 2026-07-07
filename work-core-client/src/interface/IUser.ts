@@ -1,3 +1,10 @@
+export type NotificationCategory = 'shift' | 'chat' | 'schedule' | 'system'
+export type NotificationChannel = 'web' | 'telegram'
+export type NotificationPrefs = Record<
+  NotificationCategory,
+  Record<NotificationChannel, boolean>
+>
+
 export interface IAppRole {
   id: number
   name: string
@@ -17,6 +24,7 @@ export interface IUser {
   role: 'Admin' | 'Manager' | 'Employe'
   baseLevel?: number
   mustChangePassword?: boolean
+  notificationPrefs?: NotificationPrefs | null
   dateOfBirth?: string
   phone?: string
   address?: string

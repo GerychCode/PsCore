@@ -5,11 +5,12 @@ describe('ChatService', () => {
   let service: ChatService;
   let prisma: any;
   let events: { emitToUser: jest.Mock };
+  let telegram: { sendMessage: jest.Mock };
 
   beforeEach(() => {
     prisma = {
       user: {
-        findUnique: jest.fn().mockResolvedValue({ id: 2 }),
+        findUnique: jest.fn().mockResolvedValue({ id: 2, telegramId: null }),
         findMany: jest.fn().mockResolvedValue([]),
       },
       chatMessage: {
@@ -26,7 +27,8 @@ describe('ChatService', () => {
       },
     };
     events = { emitToUser: jest.fn() };
-    service = new ChatService(prisma, events as any);
+    telegram = { sendMessage: jest.fn() };
+    service = new ChatService(prisma, events as any, telegram as any);
   });
 
   afterEach(() => jest.clearAllMocks());

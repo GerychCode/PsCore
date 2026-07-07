@@ -7,14 +7,26 @@ import { $Enums, WorkSchedule, WorkShift } from '../../generated/prisma';
 import ShiftStatus = $Enums.ShiftStatus;
 
 export type StartShiftResult =
-  | { status: 'ALREADY_ACTIVE' }
+  | { status: 'ALREADY_ACTIVE'; startedAt?: string }
   | { status: 'NO_SCHEDULE' }
   | { status: 'OVERLAP' }
-  | { status: 'STARTED'; time: string };
+  | {
+      status: 'STARTED';
+      time: string;
+      departmentName: string;
+      scheduledStart: string;
+      scheduledEnd: string;
+      late: boolean;
+    };
 
 export type EndShiftResult =
   | { status: 'NO_ACTIVE' }
-  | { status: 'ENDED'; time: string; totalHours: number };
+  | {
+      status: 'ENDED';
+      time: string;
+      startedAt: string;
+      totalHours: number;
+    };
 
 /**
  * Спільна логіка життєвого циклу зміни (створення/початок/завершення),
@@ -107,7 +119,9 @@ export class ShiftSessionService {
 
   async startShift(userId: number): Promise<StartShiftResult> {
     const activeShift = await this.findActiveShift(userId);
-    if (activeShift) return { status: 'ALREADY_ACTIVE' };
+    if (activeShift) {
+      return { status: 'ALREADY_ACTIVE', startedAt: activeShift.startedAt };
+    }
 
     const now = new Date();
     const schedule = await this.prismaService.workSchedule.findFirst({
@@ -115,6 +129,7 @@ export class ShiftSessionService {
         userId,
         date: { gte: startOfDay(now), lte: endOfDay(now) },
       },
+      include: { department: { select: { name: true } } },
     });
     if (!schedule) return { status: 'NO_SCHEDULE' };
 
@@ -148,7 +163,14 @@ export class ShiftSessionService {
     });
 
     await this.notifyShiftChanged(userId);
-    return { status: 'STARTED', time: currentTime };
+    return {
+      status: 'STARTED',
+      time: currentTime,
+      departmentName: (schedule as any).department?.name ?? '—',
+      scheduledStart: schedule.startedAt,
+      scheduledEnd: schedule.endTime,
+      late: !schedule.isDayOff && currentTime > schedule.startedAt,
+    };
   }
 
   async endShift(userId: number): Promise<EndShiftResult> {
@@ -169,6 +191,11 @@ export class ShiftSessionService {
     });
 
     await this.notifyShiftChanged(userId);
-    return { status: 'ENDED', time: endTime, totalHours };
+    return {
+      status: 'ENDED',
+      time: endTime,
+      startedAt: activeShift.startedAt,
+      totalHours,
+    };
   }
 }

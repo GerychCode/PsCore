@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { TelegramService } from '../telegram/telegram.service';
+import { isChannelEnabled } from '../notifications/notification.prefs';
 
 const MAX_MESSAGE_LENGTH = 2000;
 const HISTORY_PAGE_SIZE = 50;
@@ -14,6 +16,7 @@ export class ChatService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly eventsGateway: EventsGateway,
+    private readonly telegramService: TelegramService,
   ) {}
 
   async sendMessage(senderId: number, receiverId: number, content: string) {
@@ -36,7 +39,7 @@ export class ChatService {
 
     const receiver = await this.prismaService.user.findUnique({
       where: { id: receiverId },
-      select: { id: true },
+      select: { id: true, telegramId: true, notificationPrefs: true },
     });
     if (!receiver) throw new NotFoundException('Отримувача не знайдено!');
 
@@ -57,6 +60,22 @@ export class ChatService {
     // Отримувачу — нове повідомлення; відправнику — синхронізація інших вкладок
     this.eventsGateway.emitToUser(receiverId, 'chat:message', message);
     this.eventsGateway.emitToUser(senderId, 'chat:message', message);
+
+    // Дублювання в Telegram — лише якщо отримувач увімкнув chat.telegram
+    const prefs = (receiver.notificationPrefs as any) ?? null;
+    if (
+      receiver.telegramId &&
+      isChannelEnabled(prefs, 'chat', 'telegram')
+    ) {
+      const sender = (message as any).sender;
+      const senderName = sender
+        ? `${sender.firstName} ${sender.lastName}`
+        : 'Нове повідомлення';
+      await this.telegramService.sendMessage(
+        receiver.telegramId,
+        `💬 <b>${senderName}</b>\n${trimmed}`,
+      );
+    }
 
     return message;
   }

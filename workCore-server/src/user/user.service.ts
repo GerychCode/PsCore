@@ -15,6 +15,7 @@ import { plainToInstance } from 'class-transformer';
 import { PasswordDto } from './dto/password.dto';
 import { FileStorageService } from '../file.storage/file.starage.service';
 import { Redis } from 'ioredis';
+import { withDefaults } from '../notifications/notification.prefs';
 
 @Injectable()
 export class UserService {
@@ -79,6 +80,22 @@ export class UserService {
       where: { id: userId },
       data: { mustChangePassword: false },
     });
+  }
+
+  public async getNotificationPrefs(userId: number) {
+    const user = await this.prismaService.user.findUnique({
+      where: { id: userId },
+      select: { notificationPrefs: true },
+    });
+    return withDefaults(user?.notificationPrefs as any);
+  }
+
+  public async updateNotificationPrefs(userId: number, prefs: unknown) {
+    await this.prismaService.user.update({
+      where: { id: userId },
+      data: { notificationPrefs: prefs as any },
+    });
+    return this.getNotificationPrefs(userId);
   }
 
   /** Користувач із призначеними ролями (без хешу пароля) — для гардів прав. */

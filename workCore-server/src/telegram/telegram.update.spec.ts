@@ -11,6 +11,7 @@ describe('TelegramUpdate', () => {
     message: { text },
     from: { id: 123 },
     reply: jest.fn().mockResolvedValue(undefined),
+    replyWithHTML: jest.fn().mockResolvedValue(undefined),
   });
 
   beforeEach(() => {
@@ -79,16 +80,18 @@ describe('TelegramUpdate', () => {
   });
 
   describe('onStartShift', () => {
-    it('повідомляє, якщо акаунт не знайдено', async () => {
+    it('повідомляє, якщо акаунт не підключено', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
       const c = ctx();
       await update.onStartShift(c as any);
-      expect(c.reply).toHaveBeenCalledWith(expect.stringContaining('не знайдено'));
+      expect(c.reply).toHaveBeenCalledWith(
+        expect.stringContaining('не підключено'),
+      );
     });
 
     it('повідомляє про вже активну зміну', async () => {
       prisma.user.findUnique.mockResolvedValue({ id: 1 });
-      prisma.workShift.findFirst.mockResolvedValue({ id: 9 });
+      prisma.workShift.findFirst.mockResolvedValue({ id: 9, startedAt: '09:00' });
       const c = ctx();
       await update.onStartShift(c as any);
       expect(c.reply).toHaveBeenCalledWith(
@@ -105,17 +108,24 @@ describe('TelegramUpdate', () => {
       await update.onStartShift(c as any);
       expect(c.reply).toHaveBeenCalledWith(
         expect.stringContaining('немає запланованої'),
+        expect.anything(),
       );
     });
 
     it('створює зміну за наявності розкладу', async () => {
       prisma.user.findUnique.mockResolvedValue({ id: 1 });
       prisma.workShift.findFirst.mockResolvedValue(null);
-      prisma.workSchedule.findFirst.mockResolvedValue({ departmentId: 2 });
+      prisma.workSchedule.findFirst.mockResolvedValue({
+        departmentId: 2,
+        startedAt: '09:00',
+        endTime: '18:00',
+        isDayOff: false,
+        department: { name: 'Почайна' },
+      });
       const c = ctx();
       await update.onStartShift(c as any);
       expect(prisma.workShift.create).toHaveBeenCalled();
-      expect(c.reply).toHaveBeenCalledWith(
+      expect(c.replyWithHTML).toHaveBeenCalledWith(
         expect.stringContaining('розпочато'),
         expect.anything(),
       );
@@ -123,11 +133,13 @@ describe('TelegramUpdate', () => {
   });
 
   describe('onEndShift', () => {
-    it('повідомляє, якщо акаунт не знайдено', async () => {
+    it('повідомляє, якщо акаунт не підключено', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
       const c = ctx();
       await update.onEndShift(c as any);
-      expect(c.reply).toHaveBeenCalledWith(expect.stringContaining('не знайдено'));
+      expect(c.reply).toHaveBeenCalledWith(
+        expect.stringContaining('не підключено'),
+      );
     });
 
     it('повідомляє про відсутність активних змін', async () => {
@@ -152,7 +164,7 @@ describe('TelegramUpdate', () => {
       expect(prisma.workShift.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 5 } }),
       );
-      expect(c.reply).toHaveBeenCalledWith(
+      expect(c.replyWithHTML).toHaveBeenCalledWith(
         expect.stringContaining('завершено'),
         expect.anything(),
       );

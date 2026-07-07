@@ -49,6 +49,10 @@ export const useWebSockets = (
       // Глобальний лічильник непрочитаних (на сторінці чату його веде сама сторінка)
       chatStore.getState().increment()
 
+      // Користувач міг вимкнути веб-сповіщення чату
+      const chatWeb = userStore.getState().user?.notificationPrefs?.chat?.web
+      if (chatWeb === false) return
+
       try {
         new Audio('/notification.mp3').play().catch(() => {})
       } catch (error) {}

@@ -1,11 +1,12 @@
 import { create } from 'zustand'
-import { IUser } from '@/interface/IUser'
+import { IUser, NotificationPrefs } from '@/interface/IUser'
 
 interface UserStore {
     user: IUser | null
     isAdmin: boolean
     permissions: string[]
     updateUser: (user: IUser) => void
+    setNotificationPrefs: (prefs: NotificationPrefs) => void
     hasPermission: (permission: string) => boolean
     logout: () => void
 }
@@ -26,6 +27,12 @@ export const userStore = create<UserStore>((set, get) => ({
             isAdmin: computeIsAdmin(user),
             permissions: user.permissions ?? [],
         })),
+    setNotificationPrefs: (prefs: NotificationPrefs) =>
+        set((state) =>
+            state.user
+                ? { user: { ...state.user, notificationPrefs: prefs } }
+                : {}
+        ),
     hasPermission: (permission: string) => {
         const state = get()
         if (state.isAdmin) return true

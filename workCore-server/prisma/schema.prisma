@@ -25,6 +25,8 @@ model User {
   isEmailVerified Boolean  @default(true) @map("is_email_verified")
   // Примусова зміна пароля при першому вході (сіданий суперадмін)
   mustChangePassword Boolean @default(false) @map("must_change_password")
+  // Налаштування сповіщень: { категорія: { web: bool, telegram: bool } }
+  notificationPrefs Json?   @map("notification_prefs")
   dateOfBirth  DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
