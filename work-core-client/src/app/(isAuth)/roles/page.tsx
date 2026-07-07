@@ -16,6 +16,8 @@ const DEFAULT_COLOR = '#5865F2'
 export default function RolesPage() {
   const router = useRouter()
   const hasPermission = userStore((s) => s.hasPermission)
+  const isAdmin = userStore((s) => s.isAdmin)
+  const myPermissions = userStore((s) => s.permissions)
   const canManage = hasPermission('MANAGE_ROLES')
 
   const [roles, setRoles] = useState<IAppRoleWithCount[]>([])
@@ -49,6 +51,15 @@ export default function RolesPage() {
   const selected = useMemo(
     () => roles.find((r) => r.id === selectedId) ?? null,
     [roles, selectedId]
+  )
+
+  // Роздати можна лише права, які маєш сам (повний адмін — усі)
+  const grantablePermissions = useMemo(
+    () =>
+      isAdmin
+        ? allPermissions
+        : allPermissions.filter((p) => myPermissions.includes(p)),
+    [isAdmin, allPermissions, myPermissions]
   )
 
   const startEdit = (role: IAppRoleWithCount) => {
@@ -224,7 +235,7 @@ export default function RolesPage() {
                 </p>
               )}
               <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
-                {allPermissions.map((perm) => (
+                {grantablePermissions.map((perm) => (
                   <label
                     key={perm}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${

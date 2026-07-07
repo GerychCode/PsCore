@@ -9,10 +9,11 @@ import {
   Put,
 } from '@nestjs/common';
 import { RolesService } from './roles.service';
-import { Authorization } from '../common/decorator/auth.decorator';
+import { Authorized } from '../common/decorator/authorized.decorator';
 import { RequirePermissions } from '../common/permissions/permissions.decorator';
 import { Permission } from '../common/permissions/permission.enum';
 import { AssignRolesDto, CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
+import { User } from '../../generated/prisma';
 
 @Controller('roles')
 export class RolesController {
@@ -33,20 +34,24 @@ export class RolesController {
 
   @Post()
   @RequirePermissions(Permission.MANAGE_ROLES)
-  create(@Body() dto: CreateRoleDto) {
-    return this.rolesService.create(dto);
+  create(@Authorized() actor: User, @Body() dto: CreateRoleDto) {
+    return this.rolesService.create(actor as any, dto);
   }
 
   @Put(':id')
   @RequirePermissions(Permission.MANAGE_ROLES)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoleDto) {
-    return this.rolesService.update(id, dto);
+  update(
+    @Authorized() actor: User,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRoleDto,
+  ) {
+    return this.rolesService.update(actor as any, id, dto);
   }
 
   @Delete(':id')
   @RequirePermissions(Permission.MANAGE_ROLES)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.rolesService.remove(id);
+  remove(@Authorized() actor: User, @Param('id', ParseIntPipe) id: number) {
+    return this.rolesService.remove(actor as any, id);
   }
 
   @Get('user/:userId')
@@ -58,9 +63,10 @@ export class RolesController {
   @Put('user/:userId')
   @RequirePermissions(Permission.MANAGE_ROLES)
   setUserRoles(
+    @Authorized() actor: User,
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: AssignRolesDto,
   ) {
-    return this.rolesService.setUserRoles(userId, dto.roleIds);
+    return this.rolesService.setUserRoles(actor as any, userId, dto.roleIds);
   }
 }

@@ -26,7 +26,12 @@ describe('AuthService', () => {
     sendPasswordResetEmail: jest.Mock;
   };
   let rolesService: { assignDefaultRole: jest.Mock };
-  let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
+  let redis: {
+    set: jest.Mock;
+    get: jest.Mock;
+    del: jest.Mock;
+    scanStream: jest.Mock;
+  };
 
   const buildReq = (saveErr?: unknown, destroyErr?: unknown) =>
     ({
@@ -49,7 +54,17 @@ describe('AuthService', () => {
       sendPasswordResetEmail: jest.fn(),
     };
     rolesService = { assignDefaultRole: jest.fn() };
-    redis = { set: jest.fn(), get: jest.fn(), del: jest.fn() };
+    redis = {
+      set: jest.fn(),
+      get: jest.fn(),
+      del: jest.fn(),
+      // reset інвалідує сесії через scanStream — повертаємо порожній потік
+      scanStream: jest.fn().mockReturnValue(
+        (async function* () {
+          /* без сесій */
+        })(),
+      ),
+    };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
@@ -136,11 +151,14 @@ describe('AuthService', () => {
   });
 
   describe('resetPassword', () => {
-    it('оновлює пароль за валідним токеном', async () => {
+    it('оновлює пароль, підтверджує пошту й скидає токен', async () => {
       redis.get.mockResolvedValue('9');
       await service.resetPassword('tok', 'NewPass123');
       expect(userService.updatePassword).toHaveBeenCalledWith(9, 'NewPass123');
+      expect(userService.markEmailVerified).toHaveBeenCalledWith(9);
       expect(redis.del).toHaveBeenCalledWith('password-reset:tok');
+      // сесії користувача вилогінено
+      expect(redis.scanStream).toHaveBeenCalled();
     });
 
     it('кидає помилку за недійсним токеном', async () => {

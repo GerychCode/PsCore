@@ -29,6 +29,7 @@ export class AuthController {
     return this.authService.login(request, userLoginDto);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('verify-email')
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto.token);

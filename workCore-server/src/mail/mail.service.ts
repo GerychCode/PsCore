@@ -46,7 +46,17 @@ export class MailService implements OnModuleInit {
     }
     const from =
       this.configService.get<string>('SMTP_FROM') ?? 'no-reply@workcore.app';
-    await this.transporter.sendMail({ from, to, subject, html });
+    try {
+      await this.transporter.sendMail({ from, to, subject, html });
+    } catch (error) {
+      // Збій SMTP не має валити запит (інакше різні статуси розкривають
+      // існування пошти) і не має скасовувати вже створений акаунт
+      this.logger.error(
+        `Не вдалося надіслати лист "${subject}" на ${to}: ${
+          (error as Error).message
+        }`,
+      );
+    }
   }
 
   async sendVerificationEmail(to: string, token: string) {

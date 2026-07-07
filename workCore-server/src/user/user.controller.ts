@@ -23,7 +23,10 @@ import { Authorized } from '../common/decorator/authorized.decorator';
 import { Authorization } from '../common/decorator/auth.decorator';
 import { RequirePermissions } from '../common/permissions/permissions.decorator';
 import { Permission } from '../common/permissions/permission.enum';
-import { resolvePermissions } from '../common/permissions/permissions.util';
+import {
+  hasPermission,
+  resolvePermissions,
+} from '../common/permissions/permissions.util';
 import { $Enums, User } from '../../generated/prisma';
 import Role = $Enums.Role;
 import { UpdateUserDto, UpdateUserDtoAdmin } from './dto/update.user.dto';
@@ -54,8 +57,11 @@ export class UserController {
     @Param('id', ParseIntPipe) userId: number,
   ) {
     const user = await this.userService.findById(userId);
-    // Чутливі поля бачить лише власник профілю або адмін
-    if (requester.role !== Role.Admin && requester.id !== userId) {
+    // Чутливі поля бачить власник профілю або той, хто має VIEW_ALL_PROFILES
+    const canViewAll =
+      requester.id === userId ||
+      hasPermission(requester as any, Permission.VIEW_ALL_PROFILES);
+    if (!canViewAll) {
       const { phone, address, dateOfBirth, ...publicUser } = user;
       return publicUser;
     }

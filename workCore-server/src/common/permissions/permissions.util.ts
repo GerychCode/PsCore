@@ -2,7 +2,7 @@ import { ALL_PERMISSIONS, Permission } from './permission.enum';
 
 interface UserWithRoles {
   role?: string | null;
-  appRoles?: { permissions: string[] }[] | null;
+  appRoles?: { permissions: string[]; position?: number }[] | null;
 }
 
 /**
@@ -34,4 +34,19 @@ export function hasPermission(
   permission: Permission,
 ): boolean {
   return resolvePermissions(user).has(permission);
+}
+
+/** Повний адмін (enum Admin або роль з ADMINISTRATOR) — обходить ієрархію ролей. */
+export function isFullAdmin(user: UserWithRoles): boolean {
+  return resolvePermissions(user).has(Permission.ADMINISTRATOR);
+}
+
+/**
+ * Найвища позиція серед ролей користувача. Повний адмін = +∞
+ * (може керувати будь-якою роллю). Без ролей = -∞ (не керує нічим).
+ */
+export function maxRolePosition(user: UserWithRoles): number {
+  if (isFullAdmin(user)) return Number.POSITIVE_INFINITY;
+  const positions = (user?.appRoles ?? []).map((r) => r.position ?? 0);
+  return positions.length ? Math.max(...positions) : Number.NEGATIVE_INFINITY;
 }
