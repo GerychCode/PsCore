@@ -73,7 +73,7 @@ export class MailService implements OnModuleInit {
   }
 
   async sendInvitationEmail(to: string, token: string, name?: string) {
-    const link = `${this.clientUrl()}/auth/register?token=${token}`;
+    const link = `${this.clientUrl()}/auth/registration?token=${token}`;
     await this.send(
       to,
       'Запрошення до WorkCore',

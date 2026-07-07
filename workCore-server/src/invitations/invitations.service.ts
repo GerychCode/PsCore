@@ -36,7 +36,7 @@ export class InvitationsService {
   }
 
   private buildLink(token: string) {
-    return `${this.clientUrl()}/auth/register?token=${token}`;
+    return `${this.clientUrl()}/auth/registration?token=${token}`;
   }
 
   /** Один активний токен на користувача. */
