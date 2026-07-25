@@ -42,6 +42,11 @@ model User {
   swapClaims       ShiftSwap[]   @relation("SwapClaimer")
   swapTargets      ShiftSwap[]   @relation("SwapTarget")
   auditLogs        AuditLog[]    @relation("AuditActor")
+  absences         Absence[]     @relation("AbsenceOwner")
+  reviewedAbsences Absence[]     @relation("AbsenceReviewer")
+
+  /// Річна норма оплачуваної відпустки в днях (мінімум за КЗпП — 24)
+  vacationDaysPerYear Int? @default(24) @map("vacation_days_per_year")
 }
 
 model AppRole {
@@ -216,6 +221,49 @@ model AuditLog {
   @@index([actorId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+enum AbsenceType {
+  VACATION // оплачувана відпустка — списується з річного балансу
+  SICK // лікарняний
+  UNPAID // відгул за свій рахунок
+  OTHER // інше (навчання, донорський день тощо)
+}
+
+enum AbsenceStatus {
+  PENDING // подано, чекає рішення менеджера
+  APPROVED
+  REJECTED
+  CANCELLED // скасовано автором
+}
+
+/// Відсутність співробітника на проміжку днів.
+///
+/// Свідомо окрема сутність, а не прапорець isDayOff у графіку: відсутність
+/// має тип, період, автора рішення й історію, і мусить існувати ще ДО того,
+/// як графік на цей тиждень узагалі згенерований.
+model Absence {
+  id           Int           @id @default(autoincrement())
+  userId       Int           @map("user_id")
+  type         AbsenceType
+  status       AbsenceStatus @default(PENDING)
+  /// Обидві межі включно, час нормалізується до початку дня
+  startDate    DateTime      @map("start_date")
+  endDate      DateTime      @map("end_date")
+  reason       String?
+  /// Коментар того, хто ухвалив рішення (найчастіше — причина відмови)
+  reviewComment String?      @map("review_comment")
+  reviewedById Int?          @map("reviewed_by_id")
+  reviewedAt   DateTime?     @map("reviewed_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  user       User  @relation("AbsenceOwner", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("AbsenceReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, startDate])
+  @@index([status])
+  @@map("absences")
 }
 
 model ScheduleWish {

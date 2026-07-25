@@ -9,9 +9,10 @@ import { FileStorageService } from '../file.storage/file.starage.service';
 import { UserModule } from '../user/user.module';
 import { EmployeeLevelModule } from '../employee.level/employee.level.module';
 import { EventsModule } from '../events/events.module';
+import { AbsenceModule } from '../absence/absence.module';
 
 @Module({
-  imports: [UserModule, EmployeeLevelModule, EventsModule],
+  imports: [UserModule, EmployeeLevelModule, EventsModule, AbsenceModule],
   controllers: [WorkScheduleController],
   providers: [
     WorkScheduleService,

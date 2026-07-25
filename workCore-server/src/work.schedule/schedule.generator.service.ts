@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmployeeLevelService } from '../employee.level/employee.level.service';
 import { EventsGateway } from '../events/events.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AbsenceService } from '../absence/absence.service';
 
 const MAX_LEVEL = 10;
 
@@ -88,6 +89,7 @@ export class ScheduleGeneratorService {
     private readonly employeeLevelService: EmployeeLevelService,
     private readonly eventsGateway: EventsGateway,
     private readonly notificationsService: NotificationsService,
+    private readonly absenceService: AbsenceService,
   ) {}
 
   /**
@@ -364,6 +366,12 @@ export class ScheduleGeneratorService {
     ]);
 
     const memberIds = new Set(members.map((m) => m.id));
+
+    // Погоджені відсутності на цей тиждень (відпустки, лікарняні тощо)
+    const absentByUser = await this.absenceService.absentUserIds(
+      weekStart,
+      weekEnd,
+    );
     const weekdayHours = (weekday: number) =>
       this.isWeekend(weekday)
         ? this.shiftLengthHours(
@@ -386,6 +394,16 @@ export class ScheduleGeneratorService {
       const busyUserIds = sameDay
         .filter((s) => memberIds.has(s.userId))
         .map((s) => s.userId);
+
+      // Погоджена відсутність — тверда заборона, не побажання: людини
+      // просто немає. Додаємо до «зайнятих», щоб не потрапила в пул.
+      const dayKey = formatISO(day, { representation: 'date' });
+      for (const [userId, days] of absentByUser) {
+        if (!memberIds.has(userId)) continue;
+        if (days.some((d) => formatISO(d, { representation: 'date' }) === dayKey)) {
+          busyUserIds.push(userId);
+        }
+      }
 
       // Скільки слотів САМЕ цього відділу вже закрито (published цього відділу).
       // Вихідний слот НЕ закриває: людина того дня не працює. Без цієї умови

@@ -10,6 +10,7 @@ describe('ScheduleGeneratorService.computeAssignments', () => {
       null as any,
       null as any,
       null as any,
+      null as any,
     );
   });
 
@@ -211,6 +212,7 @@ describe('ScheduleGeneratorService (БД-оркестрація)', () => {
   let levels: any;
   let events: any;
   let notifications: any;
+  let absences: any;
 
   const department = {
     id: 1,
@@ -240,11 +242,13 @@ describe('ScheduleGeneratorService (БД-оркестрація)', () => {
     };
     events = { server: { emit: jest.fn() } };
     notifications = { createNotification: jest.fn().mockResolvedValue(null) };
+    absences = { absentUserIds: jest.fn().mockResolvedValue(new Map()) };
     service = new ScheduleGeneratorService(
       prisma,
       levels,
       events,
       notifications,
+      absences,
     );
   });
 
@@ -284,6 +288,23 @@ describe('ScheduleGeneratorService (БД-оркестрація)', () => {
       // штат у фікстурі — лише понеділок ({'1': 1}), тож усі рядки саме за нього
       const rows = prisma.workSchedule.createMany.mock.calls[0][0].data;
       // user 2 зайнятий (вихідний), тож слот має закрити user 3
+      expect(rows).toHaveLength(1);
+      expect(rows[0].userId).toBe(3);
+    });
+
+    it('погоджена відсутність виключає людину з кандидатів', async () => {
+      prisma.user.findMany.mockResolvedValue([{ id: 2 }, { id: 3 }]);
+      levels.getEmployeeLevel.mockImplementation((id: number) =>
+        Promise.resolve({ userId: id, level: 1, reliability: 0 }),
+      );
+      // user 2 у відпустці в понеділок — єдиний день зі штатом
+      absences.absentUserIds.mockResolvedValue(
+        new Map([[2, [new Date('2026-06-01')]]]),
+      );
+
+      await service.generateWeek(1, '2026-06-01');
+
+      const rows = prisma.workSchedule.createMany.mock.calls[0][0].data;
       expect(rows).toHaveLength(1);
       expect(rows[0].userId).toBe(3);
     });

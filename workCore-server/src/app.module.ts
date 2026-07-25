@@ -7,6 +7,7 @@ import { UserModule } from './user/user.module';
 import { DepartmentModule } from './department/department.module';
 import { WorkShiftModule } from './work.shift/work.shift.module';
 import { WorkScheduleModule } from './work.schedule/work.schedule.module';
+import { AbsenceModule } from './absence/absence.module';
 import { WorkShiftTagModule } from './work.shift.tag/work.shift.tag.module';
 import { EmployeeLevelModule } from './employee.level/employee.level.module';
 
@@ -45,6 +46,7 @@ import { ShiftSwapModule } from './shift.swap/shift.swap.module';
     DepartmentModule,
     WorkShiftModule,
     WorkScheduleModule,
+    AbsenceModule,
     WorkShiftTagModule,
     EmployeeLevelModule,
     TelegrafModule.forRoot({
