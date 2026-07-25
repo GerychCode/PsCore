@@ -4,10 +4,17 @@ import { toast } from 'sonner'
 import { IUserUpdate } from '@/interface/IUserUpdate'
 import { userService } from '@/service/user.service'
 
-export function userUpdate(data: IUserUpdate) {
+/**
+ * @param targetUserId якщо передано — редагуємо ЧУЖИЙ профіль через
+ * адмінський ендпоінт (потребує MANAGE_USERS). Без нього — свій власний.
+ */
+export function userUpdate(data: IUserUpdate, targetUserId?: number) {
   const { mutateAsync, isPending } = useMutation({
-    mutationKey: ['updateUser'],
-    mutationFn: async () => await userService.updateUser(data),
+    mutationKey: ['updateUser', targetUserId ?? 'self'],
+    mutationFn: async () =>
+      targetUserId
+        ? await userService.updateUserAdmin(targetUserId, data)
+        : await userService.updateUser(data),
     onSuccess: () => {
       toast.success('Дані оновлено!')
     },

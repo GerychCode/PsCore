@@ -21,6 +21,9 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = React.use(params)
   const id = parseInt(unwrappedParams.id)
   const isOwner = userData ? userData.id === id : false
+  // Керівник із MANAGE_USERS редагує чужі профілі через адмінський ендпоінт
+  const canManageUsers = userStore((state) => state.hasPermission)('MANAGE_USERS')
+  const canEdit = isOwner || canManageUsers
 
   const { mutate, isPending, user } = getUserByIdMutation(id)
 
@@ -53,7 +56,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             <p className='text-xl text-primary '>{user?.role}</p>
           </div>
         </div>
-        {isOwner && (
+        {canEdit && (
           <FaEdit
             className='text-secondary text-xl hover:opacity-75 cursor-pointer'
             onClick={() => setIsModalOpen(true)}
@@ -116,10 +119,12 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         </div>
       )}
 
-      {isOwner && (
+      {canEdit && (
         <ProfileModal
           isModalOpen={isModalOpen}
           setIsModalOpen={setIsModalOpen}
+          targetUser={isOwner ? undefined : user}
+          onUpdated={() => mutate()}
         />
       )}
     </div>

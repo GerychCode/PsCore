@@ -18,16 +18,95 @@ export class MailService implements OnModuleInit {
       );
       return;
     }
+
+    const user = this.configService.get<string>('SMTP_USER');
+    const port = Number(this.configService.get<string>('SMTP_PORT') ?? 587);
+
     this.transporter = nodemailer.createTransport({
       host,
-      port: Number(this.configService.get<string>('SMTP_PORT') ?? 587),
+      port,
       secure:
         (this.configService.get<string>('SMTP_SECURE') ?? 'false') === 'true',
       auth: {
-        user: this.configService.get<string>('SMTP_USER'),
+        user,
         pass: this.configService.get<string>('SMTP_PASS'),
       },
     });
+
+    this.warnAboutGmailPitfalls(host, user, port);
+
+    // Перевіряємо зʼєднання одразу: інакше про невірний пароль дізнаємось
+    // лише тоді, коли комусь не дійде запрошення — а send() помилки ковтає.
+    void this.transporter
+      .verify()
+      .then(() => this.logger.log(`SMTP готовий: ${host}:${port}`))
+      .catch((e: Error) =>
+        this.logger.error(
+          `SMTP не відповідає (${host}:${port}): ${e.message}. ` +
+            'Листи не надсилатимуться.',
+        ),
+      );
+  }
+
+  /**
+   * Дві помилки, на яких спотикається кожен, хто вмикає Gmail:
+   * звичайний пароль замість App Password і From, відмінний від акаунта.
+   */
+  private warnAboutGmailPitfalls(host: string, user?: string, port?: number) {
+    if (!host.includes('gmail')) return;
+
+    const from = this.configService.get<string>('SMTP_FROM');
+    const pass = this.configService.get<string>('SMTP_PASS') ?? '';
+
+    // App Password — 16 символів, які Google показує групами по 4
+    if (pass.replace(/\s/g, '').length !== 16) {
+      this.logger.warn(
+        'SMTP_PASS не схожий на App Password Google (16 символів). ' +
+          'Звичайний пароль акаунта Gmail більше не приймає — ' +
+          'створіть App Password у налаштуваннях безпеки Google.',
+      );
+    }
+
+    if (from && user && !from.includes(user)) {
+      this.logger.warn(
+        `SMTP_FROM (${from}) не збігається з SMTP_USER (${user}). ` +
+          'Gmail усе одно підставить адресу акаунта, тож лист прийде не з тієї ' +
+          'адреси, яку ви очікуєте.',
+      );
+    }
+
+    if (port === 465) {
+      this.logger.warn(
+        'Для порту 465 у Gmail потрібно SMTP_SECURE=true; для 587 — false.',
+      );
+    }
+  }
+
+  /** Чи налаштована реальна відправка (для діагностики в адмінці). */
+  isConfigured(): boolean {
+    return this.transporter !== null;
+  }
+
+  /** Тестовий лист — щоб перевірити конфігурацію, не чекаючи запрошення. */
+  async sendTestEmail(to: string): Promise<{ sent: boolean; reason?: string }> {
+    if (!this.transporter) {
+      return { sent: false, reason: 'SMTP не налаштовано (dev-режим)' };
+    }
+    const from =
+      this.configService.get<string>('SMTP_FROM') ?? 'no-reply@workcore.app';
+    try {
+      await this.transporter.sendMail({
+        from,
+        to,
+        subject: 'Перевірка пошти — WorkCore',
+        html: '<p>Якщо ви бачите цей лист, надсилання листів працює.</p>',
+      });
+      return { sent: true };
+    } catch (error) {
+      const reason = (error as Error).message;
+      this.logger.error(`Тестовий лист на ${to} не пішов: ${reason}`);
+      return { sent: false, reason };
+    }
   }
 
   private clientUrl(): string {
