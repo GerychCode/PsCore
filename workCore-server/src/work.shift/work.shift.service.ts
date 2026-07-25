@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkShiftDto } from './dto/create.work.shift.dto';
-import { endOfDay, parse, parseISO, startOfDay } from 'date-fns';
+import { endOfDay, getISODay, parse, parseISO, startOfDay } from 'date-fns';
 import { DepartmentService } from '../department/department.service';
 import { $Enums, User } from '../../generated/prisma';
 import ShiftStatus = $Enums.ShiftStatus;
@@ -17,6 +17,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { ShiftSessionService } from './shift.session.service';
 import { hasPermission } from '../common/permissions/permissions.util';
 import { Permission } from '../common/permissions/permission.enum';
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '../audit/audit.actions';
+import { TagRuleEngine } from '../work.shift.tag/tag-rule.engine';
+import { pickChangedFields } from '../common/utils/pick-changed-fields';
 
 /** Чи може користувач діяти над чужими змінами / бачити всі. */
 const canManageAllShifts = (user: User) =>
@@ -29,6 +33,8 @@ export class WorkShiftService {
     private prismaService: PrismaService,
     private departmentService: DepartmentService,
     private readonly shiftSessionService: ShiftSessionService,
+    private readonly audit: AuditService,
+    private readonly tagRuleEngine: TagRuleEngine,
   ) {}
 
   async getWorkShifts(user: User, shiftFilterDto: FilterShiftDto) {
@@ -88,7 +94,12 @@ export class WorkShiftService {
     return shifts;
   }
 
-  async getWorkShiftById(id: number) {
+  /**
+   * @param requester якщо передано — застосовуємо перевірку власності:
+   * чужу зміну бачить лише той, хто має APPROVE_SHIFTS. Без requester
+   * (внутрішні виклики) перевірку пропускаємо.
+   */
+  async getWorkShiftById(id: number, requester?: User) {
     const shift = await this.prismaService.workShift.findUnique({
       where: { id },
       include: {
@@ -105,6 +116,14 @@ export class WorkShiftService {
       },
     });
     if (!shift) throw new NotFoundException(`Зміну не знайдено!`);
+
+    if (
+      requester &&
+      !canManageAllShifts(requester) &&
+      shift.userId !== requester.id
+    ) {
+      throw new ForbiddenException('Немає доступу до цієї зміни.');
+    }
     return shift;
   }
 
@@ -172,6 +191,24 @@ export class WorkShiftService {
       },
     });
 
+    // Кастомні правила тегів (зміна створюється одразу завершеною)
+    const late =
+      !!schedule &&
+      !schedule.isDayOff &&
+      createWorkShiftDto.startedAt > schedule.startedAt;
+    await this.tagRuleEngine.apply('SHIFT_ENDED', newShift.id, {
+      userId: targetUserId,
+      departmentId: department.id,
+      totalHours: newShift.totalHours,
+      startHour: parseInt(createWorkShiftDto.startedAt.split(':')[0], 10),
+      endHour: parseInt(createWorkShiftDto.endTime.split(':')[0], 10),
+      weekday: getISODay(shiftDate),
+      late,
+      offSchedule: !schedule,
+      isDayOff: !!schedule?.isDayOff,
+      status: newShift.status,
+    });
+
     await this.shiftSessionService.notifyShiftChanged(targetUserId);
 
     return newShift;
@@ -211,12 +248,7 @@ export class WorkShiftService {
 
     const { tagIds, ...restDto } = dataToUpdate;
 
-    const changedData = Object.keys(restDto).reduce((acc, key) => {
-      if (existShift[key] !== restDto[key]) {
-        acc[key] = restDto[key];
-      }
-      return acc;
-    }, {});
+    const changedData = pickChangedFields(existShift as any, restDto);
 
     if (
       Object.keys(changedData).length === 0 &&
@@ -246,22 +278,36 @@ export class WorkShiftService {
     const startedAtStr = updateWorkShiftDto.startedAt ?? existShift.startedAt;
     const endTimeStr = updateWorkShiftDto.endTime ?? existShift.endTime;
 
-    const startedAt = parse(startedAtStr, 'HH:mm', shiftDate);
-    const endAt = parse(endTimeStr, 'HH:mm', shiftDate);
+    // Активна (незавершена) зміна не має endTime — не перераховуємо години
+    // й не валідуємо інтервал, щоб можна було, напр., підтвердити її статус.
+    const isActiveShift = !endTimeStr;
 
-    if (endAt < startedAt) {
-      throw new BadRequestException(
-        'Ви не можете закінчити робочий день до його початку!',
+    let totalHours = existShift.totalHours;
+    if (!isActiveShift) {
+      const startedAt = parse(startedAtStr, 'HH:mm', shiftDate);
+      const endAt = parse(endTimeStr, 'HH:mm', shiftDate);
+
+      if (endAt < startedAt) {
+        throw new BadRequestException(
+          'Ви не можете закінчити робочий день до його початку!',
+        );
+      }
+
+      this.shiftSessionService.validateNoOverlap(
+        dayShifts,
+        startedAt,
+        endAt,
+        id,
       );
-    }
 
-    this.shiftSessionService.validateNoOverlap(dayShifts, startedAt, endAt, id);
+      totalHours = (endAt.getTime() - startedAt.getTime()) / (1000 * 60 * 60);
+    }
 
     const updatedShift = await this.prismaService.workShift.update({
       where: { id },
       data: {
         ...restDto,
-        totalHours: (endAt.getTime() - startedAt.getTime()) / (1000 * 60 * 60),
+        totalHours,
         ...(tagIds && {
           tags: {
             set: tagIds.map((tagId) => ({ id: tagId })),
@@ -303,6 +349,24 @@ export class WorkShiftService {
       });
     }
 
+    if (statusChangedTo === ShiftStatus.APPROVED) {
+      await this.audit.log({
+        actorId: user.id,
+        action: AuditAction.SHIFT_APPROVED,
+        entity: 'WorkShift',
+        entityId: id,
+        metadata: { ownerId: existShift.userId },
+      });
+    } else if (statusChangedTo === ShiftStatus.REJECTED) {
+      await this.audit.log({
+        actorId: user.id,
+        action: AuditAction.SHIFT_REJECTED,
+        entity: 'WorkShift',
+        entityId: id,
+        metadata: { ownerId: existShift.userId },
+      });
+    }
+
     await this.shiftSessionService.notifyShiftChanged(existShift.userId);
 
     return updatedShift;
@@ -336,6 +400,14 @@ export class WorkShiftService {
       where: {
         id: id,
       },
+    });
+
+    await this.audit.log({
+      actorId: user.id,
+      action: AuditAction.SHIFT_DELETED,
+      entity: 'WorkShift',
+      entityId: id,
+      metadata: { ownerId: existEntry.userId, date: existEntry.date },
     });
 
     await this.shiftSessionService.notifyShiftChanged(existEntry.userId);
