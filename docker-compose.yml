@@ -14,9 +14,12 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      # Локальний час для логів і часу початку/кінця змін
+      - TZ=${TZ:-Europe/Kyiv}
       # Перевизначаємо хости для роботи всередині мережі Docker
       - POSTGRES_HOST=postgres
-      - REDIS_URL=redis://redis:6379
+      # Redis тепер вимагає пароль (див. .env → REDIS_PASSWORD)
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     command: sh -c "npx prisma db push && npm run start:prod"
     depends_on:
@@ -29,16 +32,23 @@ services:
   client:
     build:
       context: ./work-core-client
-      target: development
-    container_name: next_client_dev
+      # production: сторінки збираються наперед (next build) і відкриваються
+      # одразу. Для розробки з hot-reload поверніть target: development
+      # і розкоментуйте volumes нижче.
+      target: production
+      args:
+        - NEXT_PUBLIC_SERVER_HOST=${SERVER_IP:-127.0.0.1}
+    container_name: next_client
     restart: unless-stopped
     ports:
       - "1489:3000"
     env_file:
       - .env
-    volumes:
-      - ./work-core-client:/app
-      - /app/node_modules
+    environment:
+      - TZ=${TZ:-Europe/Kyiv}
+    # volumes:
+    #   - ./work-core-client:/app
+    #   - /app/node_modules
     depends_on:
       - server
 
@@ -51,10 +61,15 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - TZ=${TZ:-Europe/Kyiv}
+      - PGTZ=${TZ:-Europe/Kyiv}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # SECURITY: прив'язка ЛИШЕ до loopback — БД не має бути доступна з мережі.
+    # Для доступу ззовні використовуйте SSH-тунель. У проді краще прибрати зовсім.
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
 
   # ---------------------------------
   # CACHE (Redis)
@@ -63,8 +78,19 @@ services:
     image: redis:7
     container_name: redis_cache
     restart: unless-stopped
+    # SECURITY: Redis тримає СЕСІЇ — без пароля будь-хто в мережі підробить сесію.
+    # requirepass обов'язковий; appendonly зберігає дані між рестартами.
+    command:
+      [
+        "redis-server",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+        "--appendonly",
+        "yes",
+      ]
+    # Прив'язка лише до loopback (не 0.0.0.0)
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
 
