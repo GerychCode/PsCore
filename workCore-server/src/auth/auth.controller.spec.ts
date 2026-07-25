@@ -26,14 +26,20 @@ describe('AuthController', () => {
   });
 
   it('changePassword делегує до authService', async () => {
-    await controller.changePassword(5, {
-      currentPassword: 'a',
-      newPassword: 'NewPass123',
-    } as any);
+    const req = { sessionID: 'sess-1' } as any;
+    await controller.changePassword(
+      5,
+      {
+        currentPassword: 'a',
+        newPassword: 'NewPass123',
+      } as any,
+      req,
+    );
     expect(authService.changePassword).toHaveBeenCalledWith(
       5,
       'a',
       'NewPass123',
+      'sess-1',
     );
   });
 

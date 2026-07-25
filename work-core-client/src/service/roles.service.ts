@@ -47,4 +47,5 @@ export const PERMISSION_LABELS: Record<string, string> = {
   APPROVE_SHIFTS: 'Підтвердження змін',
   MANAGE_TAGS: 'Керування тегами',
   VIEW_ALL_PROFILES: 'Перегляд усіх профілів',
+  VIEW_AUDIT_LOG: 'Перегляд журналу аудиту',
 }

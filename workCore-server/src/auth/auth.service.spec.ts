@@ -33,10 +33,17 @@ describe('AuthService', () => {
     scanStream: jest.Mock;
   };
 
-  const buildReq = (saveErr?: unknown, destroyErr?: unknown) =>
+  const buildReq = (
+    saveErr?: unknown,
+    destroyErr?: unknown,
+    regenErr?: unknown,
+  ) =>
     ({
+      sessionID: 'sess-test',
       session: {
         userId: undefined,
+        // session fixation: login регенерує сесію перед save
+        regenerate: jest.fn((cb: (err?: unknown) => void) => cb(regenErr)),
         save: jest.fn((cb: (err?: unknown) => void) => cb(saveErr)),
         destroy: jest.fn((cb: (err?: unknown) => void) => cb(destroyErr)),
       },
@@ -232,6 +239,124 @@ describe('AuthService', () => {
       await expect(service.logout(res, req)).rejects.toThrow(
         InternalServerErrorException,
       );
+    });
+  });
+
+  describe('verifyEmail', () => {
+    it('валідний токен → підтверджує пошту', async () => {
+      redis.get.mockResolvedValue('7');
+      const res = await service.verifyEmail('tok');
+      expect(userService.markEmailVerified).toHaveBeenCalledWith(7);
+      expect(res.message).toBeDefined();
+    });
+
+    it('недійсний токен → BadRequest', async () => {
+      redis.get.mockResolvedValue(null);
+      await expect(service.verifyEmail('tok')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('resendVerification', () => {
+    it('непідтверджений користувач → надсилає лист', async () => {
+      userService.findByEmail.mockResolvedValue({
+        id: 7,
+        isEmailVerified: false,
+      });
+      redis.get.mockResolvedValue(null);
+      await service.resendVerification('a@a.com');
+      expect(mailService.sendVerificationEmail).toHaveBeenCalled();
+    });
+
+    it('користувача нема або вже підтверджений → тихо', async () => {
+      userService.findByEmail.mockResolvedValue(null);
+      await service.resendVerification('a@a.com');
+      expect(mailService.sendVerificationEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('користувач існує → лист зі скиданням', async () => {
+      userService.findByEmail.mockResolvedValue({ id: 7 });
+      redis.get.mockResolvedValue(null);
+      await service.forgotPassword('a@a.com');
+      expect(mailService.sendPasswordResetEmail).toHaveBeenCalled();
+    });
+
+    it('користувача нема → однакова відповідь, без листа', async () => {
+      userService.findByEmail.mockResolvedValue(null);
+      const res = await service.forgotPassword('a@a.com');
+      expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+      expect(res.message).toBeDefined();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('недійсний токен → BadRequest', async () => {
+      redis.get.mockResolvedValue(null);
+      await expect(
+        service.resetPassword('tok', 'NewPass1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('валідний токен: оновлює пароль і вилогінює інші сесії', async () => {
+      redis.get.mockImplementation((key: string) => {
+        if (key.startsWith('password-reset:')) return Promise.resolve('7');
+        if (key === 'sessionA') return Promise.resolve(JSON.stringify({ userId: 7 }));
+        if (key === 'sessionB') return Promise.resolve('not-json'); // catch-гілка
+        return Promise.resolve(null);
+      });
+      redis.scanStream.mockReturnValue(
+        (async function* () {
+          yield ['sessionA', 'sessionB'];
+        })(),
+      );
+      await service.resetPassword('tok', 'NewPass1');
+      expect(userService.updatePassword).toHaveBeenCalledWith(7, 'NewPass1');
+      expect(redis.del).toHaveBeenCalledWith('sessionA');
+    });
+  });
+
+  describe('додаткові гілки', () => {
+    it('rotateToken видаляє попередній токен', async () => {
+      userService.findByEmail.mockResolvedValue({ id: 7 });
+      redis.get.mockResolvedValue('old-token'); // previous існує → del
+      await service.forgotPassword('a@a.com');
+      expect(redis.del).toHaveBeenCalledWith(
+        expect.stringContaining('old-token'),
+      );
+    });
+
+    it('login: збій regenerate → InternalServerError', async () => {
+      userService.findByEmail.mockResolvedValue({
+        id: 7,
+        passwordHash: 'h',
+        isEmailVerified: true,
+      });
+      (bcrypt.compareSync as jest.Mock).mockReturnValue(true);
+      const req = buildReq(undefined, undefined, new Error('regen fail'));
+      await expect(
+        service.login(req, { email: 'a@a.com', password: 'x' } as any),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('changePassword з поточною сесією зберігає її (keepKey)', async () => {
+      userService.findByIdRaw.mockResolvedValue({ id: 5, passwordHash: 'h' });
+      (bcrypt.compareSync as jest.Mock).mockReturnValue(true);
+      redis.scanStream.mockReturnValue(
+        (async function* () {
+          yield ['sessionKEEP', 'sessionOTHER'];
+        })(),
+      );
+      redis.get.mockImplementation((key: string) =>
+        key === 'sessionOTHER'
+          ? Promise.resolve(JSON.stringify({ userId: 5 }))
+          : Promise.resolve(null),
+      );
+      await service.changePassword(5, 'Old1', 'New12345', 'KEEP');
+      // поточну сесію (sessionKEEP) не чіпаємо
+      expect(redis.del).not.toHaveBeenCalledWith('sessionKEEP');
     });
   });
 });

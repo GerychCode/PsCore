@@ -10,16 +10,21 @@ import {User} from "../../generated/prisma";
 import {Request, Response} from "express";
 import {UserLoginDto} from "./dto/login.dto";
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
 import {ConfigService} from "@nestjs/config";
 import { Redis } from 'ioredis';
 import {UserDto} from "../user/dto/user.dto";
 import { MailService } from '../mail/mail.service';
+import { rotateSingleUseToken } from '../common/utils/redis-token.util';
 
 const VERIFY_PREFIX = 'verify-email:';
 const RESET_PREFIX = 'password-reset:';
 const VERIFY_TTL = 60 * 60 * 24; // 24 години
 const RESET_TTL = 60 * 60; // 1 година
+
+// Валідний bcrypt-хеш «нізвідки» — щоб при неіснуючій пошті логін усе одно
+// витрачав час на bcrypt.compare (сталий час → без timing-enumeration).
+const DUMMY_HASH =
+  '$2b$12$prapSa872RB1E5ZYJxSRfu.MgZwks8y2xTJ9tbq3qSouoQjX5OUjS';
 
 @Injectable()
 export class AuthService {
@@ -31,14 +36,11 @@ export class AuthService {
       @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
   ) {}
 
-  private generateToken(): string {
-    return randomBytes(32).toString('hex');
-  }
-
   async changePassword(
     userId: number,
     currentPassword: string,
     newPassword: string,
+    currentSessionId?: string,
   ) {
     const user = await this.userService.findByIdRaw(userId);
     if (!user) throw new BadRequestException('Користувача не знайдено.');
@@ -50,6 +52,9 @@ export class AuthService {
 
     await this.userService.updatePassword(userId, newPassword);
     await this.userService.clearMustChangePassword(userId);
+    // Зміна пароля вилогінює всі ІНШІ сесії (поточну лишаємо активною) —
+    // на випадок, якщо стару сесію було скомпрометовано.
+    await this.invalidateUserSessions(userId, currentSessionId);
     return { message: 'Пароль оновлено.' };
   }
 
@@ -62,27 +67,24 @@ export class AuthService {
    * Створює новий токен і робить попередній (для цього ж користувача й типу)
    * недійсним — щоб водночас був живий лише один лінк.
    */
-  private async rotateToken(prefix: string, userId: number, ttl: number) {
-    const pointerKey = `${prefix}user:${userId}`;
-    const previous = await this.redisClient.get(pointerKey);
-    if (previous) {
-      await this.redisClient.del(`${prefix}${previous}`);
-    }
-    const token = this.generateToken();
-    await this.redisClient.set(`${prefix}${token}`, userId, 'EX', ttl);
-    await this.redisClient.set(pointerKey, token, 'EX', ttl);
-    return token;
+  private rotateToken(prefix: string, userId: number, ttl: number) {
+    return rotateSingleUseToken(this.redisClient, prefix, userId, ttl);
   }
 
-  /** Знищує всі активні сесії користувача (Redis-стор connect-redis). */
-  private async invalidateUserSessions(userId: number) {
+  /**
+   * Знищує активні сесії користувача (Redis-стор connect-redis).
+   * exceptSessionId — сесія, яку треба лишити (напр. поточна при зміні пароля).
+   */
+  private async invalidateUserSessions(userId: number, exceptSessionId?: string) {
     const prefix = this.configService.getOrThrow<string>('SESSION_FOLDER');
+    const keepKey = exceptSessionId ? `${prefix}${exceptSessionId}` : null;
     const stream = this.redisClient.scanStream({
       match: `${prefix}*`,
       count: 100,
     });
     for await (const keys of stream) {
       for (const key of keys as string[]) {
+        if (keepKey && key === keepKey) continue;
         const raw = await this.redisClient.get(key);
         if (!raw) continue;
         try {
@@ -155,14 +157,18 @@ export class AuthService {
     return { message: 'Пароль оновлено. Тепер увійдіть з новим паролем.' };
   }
 
-  async login(req: Request, userLoginDto: UserLoginDto){
+  async login(req: Request, userLoginDto: UserLoginDto) {
     const findUser = await this.userService.findByEmail(userLoginDto.email);
-    if(!findUser || !findUser.passwordHash){
-      throw new BadRequestException("Пошту не знайено!");
-    }
 
-    const validPassword = bcrypt.compareSync(userLoginDto.password, findUser.passwordHash);
-    if (!validPassword) throw new BadRequestException("Невірний пароль!");
+    // Єдине повідомлення + сталий час (bcrypt виконується завжди, навіть коли
+    // акаунта немає) — щоб не можна було перебирати існуючі пошти.
+    const passwordOk = bcrypt.compareSync(
+      userLoginDto.password,
+      findUser?.passwordHash || DUMMY_HASH,
+    );
+    if (!findUser || !findUser.passwordHash || !passwordOk) {
+      throw new BadRequestException('Невірна пошта або пароль.');
+    }
 
     if (!findUser.isEmailVerified) {
       throw new ForbiddenException(
@@ -179,7 +185,13 @@ export class AuthService {
         if(err){
          return reject( new InternalServerErrorException("Не вдалося завершити сесію!"))
         }
-        res.clearCookie(this.configService.getOrThrow<string>('SESSION_NAME'))
+        const name = this.configService.getOrThrow<string>('SESSION_NAME')
+        // clearCookie видаляє cookie лише з тими самими атрибутами, з якими
+        // її ставили. Чистимо обидва варіанти: host-only (поточний) і з
+        // Domain (легасі, коли SESSION_DOMAIN був заданий) — інакше cookie
+        // лишається і мідлвар клієнта вважає користувача залогіненим
+        res.clearCookie(name)
+        res.clearCookie(name, { domain: req.hostname })
         resolve()
       })
     })
@@ -187,18 +199,27 @@ export class AuthService {
 
   private async saveSession(req: Request, user: UserDto) {
     return new Promise((resolve, reject) => {
-      req.session.userId= user.id;
-
-      req.session.save(err => {
-        if (err) {
+      // Захист від session fixation: видаємо НОВИЙ id сесії при вході,
+      // щоб раніше «підсаджений» атакувальником id не отримав привілеї.
+      req.session.regenerate((regenErr) => {
+        if (regenErr) {
           return reject(
-              new InternalServerErrorException(
-                  'Не удалось сохранить сессию. Проверьте, правильно ли настроены параметры сессии.'
-              )
+            new InternalServerErrorException('Не вдалося створити сесію.'),
           );
         }
 
-        resolve(undefined);
+        req.session.userId = user.id;
+
+        req.session.save((err) => {
+          if (err) {
+            return reject(
+              new InternalServerErrorException(
+                'Не вдалося зберегти сесію. Перевірте налаштування сесії.',
+              ),
+            );
+          }
+          resolve(undefined);
+        });
       });
     });
   }

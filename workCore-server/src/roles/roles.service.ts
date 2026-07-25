@@ -13,6 +13,8 @@ import {
   maxRolePosition,
   resolvePermissions,
 } from '../common/permissions/permissions.util';
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '../audit/audit.actions';
 
 /** Той, хто виконує дію (request.user з ролями). */
 export interface Actor {
@@ -25,7 +27,10 @@ export interface Actor {
 export class RolesService implements OnModuleInit {
   private readonly logger = new Logger('RolesService');
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   /**
    * Перевіряє, що актор має право керувати роллю з такими правами й позицією:
@@ -135,7 +140,7 @@ export class RolesService implements OnModuleInit {
 
     await this.ensureNameFree(dto.name);
     if (dto.isDefault) await this.clearDefault();
-    return this.prisma.appRole.create({
+    const created = await this.prisma.appRole.create({
       data: {
         name: dto.name,
         color: dto.color ?? '#99AAB5',
@@ -144,6 +149,14 @@ export class RolesService implements OnModuleInit {
         isDefault: dto.isDefault ?? false,
       },
     });
+    await this.audit.log({
+      actorId: actor.id,
+      action: AuditAction.ROLE_CREATED,
+      entity: 'AppRole',
+      entityId: created.id,
+      metadata: { name: created.name, permissions, position },
+    });
+    return created;
   }
 
   async update(actor: Actor, id: number, dto: UpdateRoleDto) {
@@ -176,7 +189,7 @@ export class RolesService implements OnModuleInit {
 
     if (dto.isDefault) await this.clearDefault();
 
-    return this.prisma.appRole.update({
+    const updated = await this.prisma.appRole.update({
       where: { id },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
@@ -186,6 +199,14 @@ export class RolesService implements OnModuleInit {
         ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
       },
     });
+    await this.audit.log({
+      actorId: actor.id,
+      action: AuditAction.ROLE_UPDATED,
+      entity: 'AppRole',
+      entityId: id,
+      metadata: { changes: dto },
+    });
+    return updated;
   }
 
   async remove(actor: Actor, id: number) {
@@ -198,6 +219,13 @@ export class RolesService implements OnModuleInit {
       position: role.position,
     });
     await this.prisma.appRole.delete({ where: { id } });
+    await this.audit.log({
+      actorId: actor.id,
+      action: AuditAction.ROLE_DELETED,
+      entity: 'AppRole',
+      entityId: id,
+      metadata: { name: role.name },
+    });
     return { success: true };
   }
 
@@ -250,6 +278,13 @@ export class RolesService implements OnModuleInit {
     await this.prisma.user.update({
       where: { id: userId },
       data: { appRoles: { set: uniqueIds.map((id) => ({ id })) } },
+    });
+    await this.audit.log({
+      actorId: actor.id,
+      action: AuditAction.ROLES_ASSIGNED,
+      entity: 'User',
+      entityId: userId,
+      metadata: { roleIds: uniqueIds },
     });
     return this.getUserRoles(userId);
   }
