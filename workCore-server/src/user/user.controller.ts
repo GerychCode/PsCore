@@ -115,8 +115,12 @@ export class UserController {
 
   @Get('list')
   @Authorization()
-  public async getAllUsers() {
-    return this.userService.findAllUsers();
+  public async getAllUsers(@Authorized() requester: User) {
+    const canViewAll = hasPermission(
+      requester as any,
+      Permission.VIEW_ALL_PROFILES,
+    );
+    return this.userService.findAllUsers(canViewAll);
   }
 
   @Put('update/:id')

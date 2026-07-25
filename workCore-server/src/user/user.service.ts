@@ -16,6 +16,15 @@ import { PasswordDto } from './dto/password.dto';
 import { FileStorageService } from '../file.storage/file.starage.service';
 import { Redis } from 'ioredis';
 import { withDefaults } from '../notifications/notification.prefs';
+import { pickChangedFields } from '../common/utils/pick-changed-fields';
+import { randomInt } from 'crypto';
+import * as fs from 'node:fs';
+import { isAllowedImage } from '../common/utils/image-signature';
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '../audit/audit.actions';
+
+// Вартість bcrypt: 12 раундів (компроміс безпека/швидкість для чутливих даних)
+const SALT_ROUNDS = 12;
 
 @Injectable()
 export class UserService {
@@ -23,29 +32,38 @@ export class UserService {
     private readonly prismaService: PrismaService,
     private readonly fileStorageService: FileStorageService,
     @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
+    private readonly audit: AuditService,
   ) {}
 
   public async generateTelegramCode(userId: number): Promise<string> {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // crypto.randomInt — CSPRNG (Math.random передбачуваний)
+    const code = randomInt(100000, 1000000).toString();
     await this.redisClient.set(`telegram-code:${code}`, userId, 'EX', 300);
     return code;
   }
 
-  public async findAllUsers() {
+  /**
+   * Список користувачів. Чутливі поля (email/phone/address/dateOfBirth)
+   * повертаємо ЛИШЕ тим, хто має VIEW_ALL_PROFILES — інакше будь-який
+   * залогінений викачав би PII усього штату.
+   */
+  public async findAllUsers(canViewAll = false) {
     return this.prismaService.user.findMany({
       select: {
         id: true,
         avatar: true,
         firstName: true,
         lastName: true,
-        email: true,
-        phone: true,
-        address: true,
         role: true,
         baseLevel: true,
-        dateOfBirth: true,
         createdAt: true,
         updatedAt: true,
+        ...(canViewAll && {
+          email: true,
+          phone: true,
+          address: true,
+          dateOfBirth: true,
+        }),
       },
     });
   }
@@ -140,7 +158,9 @@ export class UserService {
         email: data.email,
         phone: data.phone,
         address: data.address,
-        passwordHash: data.password ? await bcrypt.hash(data.password, 10) : '',
+        passwordHash: data.password
+          ? await bcrypt.hash(data.password, SALT_ROUNDS)
+          : '',
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
         role: data.role,
         avatar: data.avatar,
@@ -160,7 +180,7 @@ export class UserService {
   }
 
   public async updatePassword(userId: number, newPassword: string) {
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     return this.prismaService.user.update({
       where: { id: userId },
       data: { passwordHash },
@@ -180,15 +200,22 @@ export class UserService {
       throw new NotFoundException(`Користувача не знайдено`);
     }
 
-    const changedData = Object.keys(updateUserDto).reduce((acc, key) => {
-      if (userData[key] !== updateUserDto[key]) {
-        acc[key] = updateUserDto[key];
-      }
-      return acc;
-    }, {});
+    const changedData = pickChangedFields(userData as any, updateUserDto);
 
     if (Object.keys(changedData).length === 0) {
       throw new BadRequestException('Нові дані ідентичні поточним!');
+    }
+
+    // Зміна пошти: перевіряємо унікальність заздалегідь (інакше сирий P2002 →
+    // 500 і побічний enumeration існуючих пошт).
+    if ('email' in changedData) {
+      const taken = await this.prismaService.user.findUnique({
+        where: { email: (changedData as { email: string }).email },
+        select: { id: true },
+      });
+      if (taken && taken.id !== userData.id) {
+        throw new BadRequestException('Ця пошта вже використовується.');
+      }
     }
 
     const updatedUser = await this.prismaService.user.update({
@@ -213,6 +240,13 @@ export class UserService {
     await this.prismaService.user.delete({
       where: { id: targetUserId },
     });
+    await this.audit.log({
+      actorId: userId,
+      action: AuditAction.USER_DELETED,
+      entity: 'User',
+      entityId: targetUserId,
+      metadata: { email: user.email },
+    });
     return HttpStatus.OK;
   }
 
@@ -234,7 +268,25 @@ export class UserService {
   }
 
   async saveAvatarToDB(user: User, file: Express.Multer.File) {
-    let oldImagePath: string = user?.avatar;
+    // SECURITY: перевіряємо реальні «магічні байти», а не client-MIME/розширення.
+    // Файл уже на диску (diskStorage) — читаємо заголовок; якщо не зображення,
+    // видаляємо його й відхиляємо запит.
+    const header = Buffer.alloc(16);
+    try {
+      const fd = fs.openSync(file.path, 'r');
+      fs.readSync(fd, header, 0, 16, 0);
+      fs.closeSync(fd);
+    } catch {
+      throw new BadRequestException('Не вдалося прочитати файл.');
+    }
+    if (!isAllowedImage(header)) {
+      this.fileStorageService.deleteFile(file.filename);
+      throw new BadRequestException(
+        'Файл не є коректним зображенням (jpg, png, webp, gif).',
+      );
+    }
+
+    const oldImagePath: string = user?.avatar;
     const updatedUser = await this.prismaService.user.update({
       where: { id: user.id },
       data: {

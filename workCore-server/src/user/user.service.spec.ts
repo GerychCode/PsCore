@@ -5,11 +5,27 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import { UserService } from './user.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FileStorageService } from '../file.storage/file.starage.service';
+import { AuditService } from '../audit/audit.service';
 
 jest.mock('bcrypt');
+
+// Мінімальний валідний PNG-заголовок для перевірки магічних байтів
+const PNG_HEADER = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00,
+]);
+
+function makeTempImage(): string {
+  const p = path.join(os.tmpdir(), `avatar-test-${Date.now()}.png`);
+  fs.writeFileSync(p, PNG_HEADER);
+  return p;
+}
 
 describe('UserService', () => {
   let service: UserService;
@@ -38,6 +54,10 @@ describe('UserService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: FileStorageService, useValue: fileStorage },
         { provide: 'REDIS_CLIENT', useValue: redis },
+        {
+          provide: AuditService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
@@ -101,7 +121,7 @@ describe('UserService', () => {
         password: 'secret',
         dateOfBirth: '2000-01-01',
       });
-      expect(bcrypt.hash).toHaveBeenCalledWith('secret', 10);
+      expect(bcrypt.hash).toHaveBeenCalledWith('secret', 12);
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ passwordHash: 'hashed' }),
@@ -222,21 +242,192 @@ describe('UserService', () => {
 
   describe('saveAvatarToDB', () => {
     it('оновлює аватар і видаляє старий файл', async () => {
+      const tmp = makeTempImage();
       prisma.user.update.mockResolvedValue({ id: 1, avatar: 'new.png' });
       await service.saveAvatarToDB(
         { id: 1, avatar: 'old.png' } as any,
-        { filename: 'new.png' } as any,
+        { filename: 'new.png', path: tmp } as any,
       );
       expect(fileStorage.deleteFile).toHaveBeenCalledWith('old.png');
+      fs.rmSync(tmp, { force: true });
     });
 
     it('не видаляє файл, якщо старого аватара не було', async () => {
+      const tmp = makeTempImage();
       prisma.user.update.mockResolvedValue({ id: 1, avatar: 'new.png' });
       await service.saveAvatarToDB(
         { id: 1, avatar: '' } as any,
-        { filename: 'new.png' } as any,
+        { filename: 'new.png', path: tmp } as any,
       );
       expect(fileStorage.deleteFile).not.toHaveBeenCalled();
+      fs.rmSync(tmp, { force: true });
+    });
+
+    it('відхиляє файл, що не є зображенням (магічні байти)', async () => {
+      const p = path.join(os.tmpdir(), `notimg-${Date.now()}.png`);
+      fs.writeFileSync(p, Buffer.from('<html>not an image</html>'));
+      prisma.user.update.mockResolvedValue({ id: 1, avatar: 'new.png' });
+      await expect(
+        service.saveAvatarToDB(
+          { id: 1, avatar: '' } as any,
+          { filename: 'new.png', path: p } as any,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      // невалідний файл має бути видалений
+      expect(fileStorage.deleteFile).toHaveBeenCalledWith('new.png');
+      fs.rmSync(p, { force: true });
+    });
+  });
+
+  describe('методи, покриті додатково', () => {
+    it('generateTelegramCode кладе код у Redis', async () => {
+      const code = await service.generateTelegramCode(5);
+      expect(code).toMatch(/^\d{6}$/);
+      expect(redis.set).toHaveBeenCalled();
+    });
+
+    it('findByIdWithRoles: знайдено (без passwordHash) / не знайдено', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        passwordHash: 'secret',
+        appRoles: [],
+      });
+      const safe: any = await service.findByIdWithRoles(1);
+      expect(safe.passwordHash).toBeUndefined();
+
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.findByIdWithRoles(1)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('findById кидає NotFound', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.findById(1)).rejects.toThrow(NotFoundException);
+    });
+
+    it('markEmailVerified / clearMustChangePassword / updatePassword → update', async () => {
+      prisma.user.update.mockResolvedValue({});
+      await service.markEmailVerified(1);
+      await service.clearMustChangePassword(1);
+      await service.updatePassword(1, 'NewPass1');
+      expect(prisma.user.update).toHaveBeenCalledTimes(3);
+    });
+
+    it('create без пароля лишає порожній хеш', async () => {
+      prisma.user.create.mockResolvedValue({ id: 1 });
+      await service.create({
+        firstName: 'І',
+        lastName: 'П',
+        email: 'a@a.com',
+        password: '',
+      } as any);
+      const arg = prisma.user.create.mock.calls[0][0];
+      expect(arg.data.passwordHash).toBe('');
+    });
+
+    it('notification prefs: get і update', async () => {
+      prisma.user.findUnique.mockResolvedValue({ notificationPrefs: null });
+      prisma.user.update.mockResolvedValue({});
+      await service.updateNotificationPrefs(1, { shift: { web: false } });
+      expect(prisma.user.update).toHaveBeenCalled();
+      const prefs = await service.getNotificationPrefs(1);
+      expect(prefs).toHaveProperty('shift');
+    });
+
+    it('getNotificationPrefs коли користувача нема → дефолти', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.getNotificationPrefs(99)).resolves.toHaveProperty(
+        'shift',
+      );
+    });
+
+    it('updateUser: змішані зміни (частина полів однакова)', async () => {
+      prisma.user.update.mockResolvedValue({ id: 1 });
+      await service.updateUser(
+        { firstName: 'Same', lastName: 'New' } as any,
+        undefined,
+        { id: 1, firstName: 'Same', lastName: 'Old' } as any,
+      );
+      expect(prisma.user.update).toHaveBeenCalled();
+    });
+
+    it('getUserStatistics: зміна без tags → "Без тегу"', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 1 });
+      prisma.workShift.findMany.mockResolvedValue([
+        { date: new Date(2026, 5, 1), totalHours: 5, tags: undefined },
+      ]);
+      const res = await service.getUserStatistics(1, 6, 2026);
+      expect(res.tagDistribution.map((t) => t.name)).toContain('Без тегу');
+    });
+  });
+
+  describe('getUserStatistics', () => {
+    it('користувача нема → NotFound', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.getUserStatistics(1, 6, 2026)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('агрегує години, овертайм і розподіл тегів (у т.ч. "Без тегу")', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 1 });
+      prisma.workShift.findMany.mockResolvedValue([
+        { date: new Date(2026, 5, 1), totalHours: 200, tags: [{ name: 'Ніч' }] },
+        { date: new Date(2026, 5, 2), totalHours: 5, tags: [] },
+      ]);
+      const res = await service.getUserStatistics(1, 6, 2026);
+      expect(res.totalShifts).toBe(2);
+      expect(res.overtimeHours).toBeGreaterThan(0);
+      const names = res.tagDistribution.map((t) => t.name);
+      expect(names).toEqual(expect.arrayContaining(['Ніч', 'Без тегу']));
+    });
+  });
+
+  describe('updateUser — додаткові гілки', () => {
+    it('порожній DTO → BadRequest', async () => {
+      await expect(
+        service.updateUser({} as any, undefined, { id: 1 } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('дані ідентичні → BadRequest', async () => {
+      await expect(
+        service.updateUser({ firstName: 'Same' } as any, undefined, {
+          id: 1,
+          firstName: 'Same',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('зайнята пошта → BadRequest', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 99 });
+      await expect(
+        service.updateUser({ email: 'taken@a.com' } as any, undefined, {
+          id: 1,
+          email: 'old@a.com',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('destroyUser', () => {
+    it('видалити себе не можна', async () => {
+      await expect(service.destroyUser(1, 1)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('ціль не знайдено → NotFound', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.destroyUser(1, 2)).rejects.toThrow(NotFoundException);
+    });
+
+    it('успіх → delete + аудит', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 2, email: 'a@a.com' });
+      prisma.user.delete.mockResolvedValue({});
+      await service.destroyUser(1, 2);
+      expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 2 } });
     });
   });
 

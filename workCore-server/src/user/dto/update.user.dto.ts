@@ -47,9 +47,9 @@ export class UpdateUserDto {
     @IsString({ message: 'Адреса повинна бути рядком.' })
     address?: string;
 
-    @IsString({ message: 'Аватар повинен бути рядком.' })
-    @IsOptional()
-    avatar?: string;
+    // SECURITY: avatar НЕ можна задавати цим ендпоінтом — лише через завантаження
+    // файлу (PUT /user/avatar). Вільний рядок тут відкривав path traversal у
+    // deleteFile. Тепер forbidNonWhitelisted відхилить поле, якщо його надішлють.
 }
 
 export class UpdateUserDtoAdmin extends UpdateUserDto {

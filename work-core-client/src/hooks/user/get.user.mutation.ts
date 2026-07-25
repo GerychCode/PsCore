@@ -18,6 +18,9 @@ export function useGetUserMutation() {
     },
     onError: (error: unknown | Error) => {
       if (axios.isAxiosError(error)) {
+        // 401 = протухла сесія: редіректом на логін займається axios-перехоплювач,
+        // тост тут лише блимнув би зайвою помилкою
+        if (error.response?.status === 401) return
         const data = error.response?.data
         toast.error(error.message || data?.message)
       } else {

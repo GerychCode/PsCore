@@ -61,9 +61,20 @@ describe('UserController', () => {
     expect(userService.saveAvatarToDB).toHaveBeenCalledWith(user, file);
   });
 
-  it('getAllUsers повертає список', async () => {
-    await controller.getAllUsers();
-    expect(userService.findAllUsers).toHaveBeenCalled();
+  it('getAllUsers повертає список (без PII для звичайного користувача)', async () => {
+    const requester = { id: 1, role: 'Employe', appRoles: [] } as any;
+    await controller.getAllUsers(requester);
+    expect(userService.findAllUsers).toHaveBeenCalledWith(false);
+  });
+
+  it('getAllUsers віддає PII власнику VIEW_ALL_PROFILES', async () => {
+    const requester = {
+      id: 1,
+      role: 'Employe',
+      appRoles: [{ permissions: ['VIEW_ALL_PROFILES'] }],
+    } as any;
+    await controller.getAllUsers(requester);
+    expect(userService.findAllUsers).toHaveBeenCalledWith(true);
   });
 
   it('updateUserForAdmin оновлює за id', async () => {
@@ -101,5 +112,24 @@ describe('UserController', () => {
     expect(call[0]).toBe(1);
     expect(typeof call[1]).toBe('number');
     expect(typeof call[2]).toBe('number');
+  });
+
+  it('getStatistics з валідними місяцем/роком', async () => {
+    await controller.getStatistics(1, '6', '2026');
+    expect(userService.getUserStatistics).toHaveBeenCalledWith(1, 6, 2026);
+  });
+
+  it('notification prefs: get і update делегують', async () => {
+    userService.getNotificationPrefs = jest.fn().mockResolvedValue({});
+    userService.updateNotificationPrefs = jest.fn().mockResolvedValue({});
+    await controller.getNotificationPrefs(1);
+    await controller.updateNotificationPrefs(1, { preferences: { a: 1 } } as any);
+    expect(userService.getNotificationPrefs).toHaveBeenCalledWith(1);
+    expect(userService.updateNotificationPrefs).toHaveBeenCalledWith(1, { a: 1 });
+  });
+
+  it('generateTelegramCode делегує', async () => {
+    const res = await controller.generateTelegramCode(1);
+    expect(res).toEqual({ code: '123456' });
   });
 });
