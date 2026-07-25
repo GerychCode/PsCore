@@ -158,6 +158,13 @@ model WorkSchedule {
   endTime      String   @map("end_time")
   isDayOff     Boolean? @default(false) @map("is_day_off")
   isDraft      Boolean  @default(false) @map("is_draft")
+
+  /// Знімок рядка до того, як генератор його «перехопив» (зайняв власний
+  /// вихідний або перевів людину з іншого відділення):
+  /// { departmentId, isDayOff, startedAt, endTime }.
+  /// Потрібен, щоб «Відхилити» повертало рядок власнику, а не видаляло його
+  /// разом зі звичайними чернетками. null = рядок створено генератором з нуля.
+  takeover     Json?    @map("takeover")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 

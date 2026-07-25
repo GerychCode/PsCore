@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { eachDayOfInterval, formatISO, getISODay } from 'date-fns';
+import { eachDayOfInterval, formatISO, getISODay, startOfDay } from 'date-fns';
 import { weekBounds } from '../common/utils/week.util';
+import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmployeeLevelService } from '../employee.level/employee.level.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -51,6 +52,16 @@ export interface GenDay {
   coveredCount: number;
   /** Користувачі, що хочуть цей день вихідним */
   wishUserIds: number[];
+  /**
+   * Люди, що поставили собі вихідний у таблиці. Мʼяке обмеження: зайняти
+   * можна, але дорого — лише коли інакше день не закрити.
+   */
+  dayOffUserIds?: number[];
+  /**
+   * Люди зі зміною в ІНШОМУ відділенні, яких дозволено перевести сюди.
+   * Список уже відфільтрований: відділення-донор лишається укомплектованим.
+   */
+  borrowableUserIds?: number[];
   /** Тривалість зміни цього дня в годинах (для рівномірності навантаження) */
   shiftHours: number;
   /** Початок/кінець зміни в годинах (9.5 = 09:30) — для міжзмінного відпочинку */
@@ -58,14 +69,23 @@ export interface GenDay {
   endHour?: number;
 }
 
+/** Звідки взявся слот: новий рядок, зайнятий вихідний чи переведення. */
+export type AssignmentSource = 'NEW' | 'DAY_OFF' | 'BORROW';
+
 export interface Assignment {
   userId: number;
   weekday: number;
+  source: AssignmentSource;
 }
 
 export interface GenWarning {
   weekday: number;
-  type: 'UNDERSTAFFED' | 'WISH_VIOLATED' | 'LIMIT_BLOCKED';
+  type:
+    | 'UNDERSTAFFED'
+    | 'WISH_VIOLATED'
+    | 'LIMIT_BLOCKED'
+    | 'DAY_OFF_TAKEN'
+    | 'BORROWED';
   message: string;
   userId?: number;
 }
@@ -79,6 +99,14 @@ export interface GenResult {
 export class ScheduleGeneratorService {
   // Порушити побажання можна лише коли інакше не закрити зміну
   private readonly WISH_PENALTY = 10000;
+  /**
+   * Штрафи-«крайні заходи», навмисно на порядки більші за WISH_PENALTY,
+   * щоб спрацьовували лише за відсутності звичайних кандидатів. Порядок:
+   * побажання → власний вихідний → переведення з іншого відділення.
+   * Переведення найдорожче, бо зачіпає дві команди, а не одну людину.
+   */
+  private readonly DAY_OFF_PENALTY = 100_000;
+  private readonly BORROW_PENALTY = 1_000_000;
   // Рівномірність за годинами: ~10-годинна зміна ≈ повний розкид рівнів
   private readonly FAIRNESS_PER_HOUR = 10;
   private readonly LEVEL_WEIGHT = 10;
@@ -184,6 +212,8 @@ export class ScheduleGeneratorService {
       if (remaining <= 0) continue;
 
       const wishSet = new Set(day.wishUserIds);
+      const dayOffSet = new Set(day.dayOffUserIds ?? []);
+      const borrowSet = new Set(day.borrowableUserIds ?? []);
       const isPeak = day.required > avgRequired;
 
       // Обмеження — тверді: кандидат, що їх порушує, не потрапляє в пул
@@ -205,6 +235,8 @@ export class ScheduleGeneratorService {
           let score = 0;
 
           if (wishSet.has(m.userId)) score -= this.WISH_PENALTY;
+          if (dayOffSet.has(m.userId)) score -= this.DAY_OFF_PENALTY;
+          if (borrowSet.has(m.userId)) score -= this.BORROW_PENALTY;
           score -= assignedHours * this.FAIRNESS_PER_HOUR;
           // Пікові дні тягнуть сильних; спокійні — ротація нижчих рівнів
           score += isPeak
@@ -220,7 +252,37 @@ export class ScheduleGeneratorService {
       const picked = pool.slice(0, remaining);
 
       for (const { member } of picked) {
-        assignments.push({ userId: member.userId, weekday: day.weekday });
+        const source: AssignmentSource = borrowSet.has(member.userId)
+          ? 'BORROW'
+          : dayOffSet.has(member.userId)
+            ? 'DAY_OFF'
+            : 'NEW';
+
+        assignments.push({
+          userId: member.userId,
+          weekday: day.weekday,
+          source,
+        });
+
+        if (source === 'DAY_OFF') {
+          warnings.push({
+            weekday: day.weekday,
+            type: 'DAY_OFF_TAKEN',
+            userId: member.userId,
+            message:
+              `День ${day.weekday}: зайнято власний вихідний працівника — ` +
+              'інакше день не закривався.',
+          });
+        } else if (source === 'BORROW') {
+          warnings.push({
+            weekday: day.weekday,
+            type: 'BORROWED',
+            userId: member.userId,
+            message:
+              `День ${day.weekday}: працівника переведено з іншого відділення. ` +
+              'Попередьте його менеджера.',
+          });
+        }
         assignedHoursByUser.set(
           member.userId,
           (assignedHoursByUser.get(member.userId) ?? 0) + day.shiftHours,
@@ -333,7 +395,10 @@ export class ScheduleGeneratorService {
         department.minRestHours ?? DEFAULT_LOAD_LIMITS.minRestHours,
     };
 
-    // Спершу прибираємо стару чернетку цього відділу — щоб не рахувати її як зайнятість
+    // Спершу відкочуємо попередню пропозицію цього відділу, щоб рахувати
+    // з чистого стану: перехоплені рядки повертаємо власникам, решту чернеток
+    // просто видаляємо.
+    await this.restoreTakeovers(departmentId, weekStart, weekEnd);
     await this.prismaService.workSchedule.deleteMany({
       where: {
         departmentId,
@@ -372,6 +437,17 @@ export class ScheduleGeneratorService {
       weekStart,
       weekEnd,
     );
+
+    // Штат інших відділень — щоб не забрати людину з того, де й так впритул
+    const allDepartments = await this.prismaService.department.findMany({
+      select: { id: true, staffingByWeekday: true },
+    });
+    const staffingByDepartment = new Map<number, Record<string, number>>(
+      allDepartments.map((d) => [
+        d.id,
+        (d.staffingByWeekday ?? {}) as Record<string, number>,
+      ]),
+    );
     const weekdayHours = (weekday: number) =>
       this.isWeekend(weekday)
         ? this.shiftLengthHours(
@@ -390,10 +466,46 @@ export class ScheduleGeneratorService {
         (s) => getISODay(s.date) === weekday,
       );
 
-      // Зайняті будь-де цього дня (виключаємо з кандидатів)
-      const busyUserIds = sameDay
-        .filter((s) => memberIds.has(s.userId))
-        .map((s) => s.userId);
+      // Зайняті цього дня — усі, кого не можна взяти взагалі. Двох категорій
+      // тут навмисно НЕМАЄ: вони перейдуть у дорогі, але допустимі варіанти.
+      const busyUserIds: number[] = [];
+      const dayOffUserIds: number[] = [];
+      const borrowableUserIds: number[] = [];
+
+      for (const s of sameDay) {
+        if (!memberIds.has(s.userId)) continue;
+
+        // Власний вихідний — мʼяка перешкода: людина того дня вільна
+        if (s.isDayOff) {
+          dayOffUserIds.push(s.userId);
+          continue;
+        }
+
+        // Зміна в іншому відділенні: перевести можна лише якщо донор
+        // лишиться укомплектованим. Інакше ми просто пересуваємо дірку.
+        if (s.departmentId !== departmentId && !s.isDraft) {
+          const donorStaffing = staffingByDepartment.get(s.departmentId);
+          const donorRequiredRaw = donorStaffing?.[String(weekday)];
+
+          // Якщо в донора штат не налаштований, довести, що він лишиться
+          // укомплектованим, неможливо — тоді не чіпаємо. Інакше відділення
+          // без налаштувань виглядало б як таке, що «нікого не потребує»,
+          // і його людей можна було б забирати всіх до одного.
+          if (donorRequiredRaw !== undefined) {
+            const donorAssigned = sameDay.filter(
+              (o) =>
+                o.departmentId === s.departmentId && !o.isDraft && !o.isDayOff,
+            ).length;
+
+            if (donorAssigned - 1 >= Number(donorRequiredRaw)) {
+              borrowableUserIds.push(s.userId);
+              continue;
+            }
+          }
+        }
+
+        busyUserIds.push(s.userId);
+      }
 
       // Погоджена відсутність — тверда заборона, не побажання: людини
       // просто немає. Додаємо до «зайнятих», щоб не потрапила в пул.
@@ -429,6 +541,8 @@ export class ScheduleGeneratorService {
         busyUserIds,
         coveredCount,
         wishUserIds,
+        dayOffUserIds,
+        borrowableUserIds,
         shiftHours: weekdayHours(weekday),
         startHour: toHours(
           weekend
@@ -467,24 +581,59 @@ export class ScheduleGeneratorService {
 
     const weekdayToDate = new Map(weekDays.map((d) => [getISODay(d), d]));
 
-    const rows = assignments.map((a) => {
-      const weekend = this.isWeekend(a.weekday);
-      return {
-        userId: a.userId,
-        departmentId,
-        date: weekdayToDate.get(a.weekday)!,
-        startedAt: weekend
-          ? department.weekendsOpeningTime
-          : department.weekdaysOpeningTime,
-        endTime: weekend
-          ? department.weekendsClosingTime
-          : department.weekdaysClosingTime,
-        isDayOff: false,
-        isDraft: true,
-      };
-    });
+    // Перехоплення міняють НАЯВНІ рядки: створити другий на той самий день
+    // не дасть unique(userId, date), та й людина не працює у двох місцях.
+    const takeovers = assignments.filter((a) => a.source !== 'NEW');
+    for (const a of takeovers) {
+      const date = weekdayToDate.get(a.weekday)!;
+      const existing = existingSchedules.find(
+        (s) => s.userId === a.userId && getISODay(s.date) === a.weekday,
+      );
+      if (!existing) continue;
 
-    let created = 0;
+      const weekend = this.isWeekend(a.weekday);
+      await this.prismaService.workSchedule.updateMany({
+        where: { userId: a.userId, date: startOfDay(date) },
+        data: {
+          departmentId,
+          startedAt: weekend
+            ? department.weekendsOpeningTime
+            : department.weekdaysOpeningTime,
+          endTime: weekend
+            ? department.weekendsClosingTime
+            : department.weekdaysClosingTime,
+          isDayOff: false,
+          isDraft: true,
+          takeover: {
+            departmentId: existing.departmentId,
+            isDayOff: !!existing.isDayOff,
+            startedAt: existing.startedAt,
+            endTime: existing.endTime,
+          },
+        },
+      });
+    }
+
+    const rows = assignments
+      .filter((a) => a.source === 'NEW')
+      .map((a) => {
+        const weekend = this.isWeekend(a.weekday);
+        return {
+          userId: a.userId,
+          departmentId,
+          date: weekdayToDate.get(a.weekday)!,
+          startedAt: weekend
+            ? department.weekendsOpeningTime
+            : department.weekdaysOpeningTime,
+          endTime: weekend
+            ? department.weekendsClosingTime
+            : department.weekdaysClosingTime,
+          isDayOff: false,
+          isDraft: true,
+        };
+      });
+
+    let created = takeovers.length;
     if (rows.length > 0) {
       // skipDuplicates: якщо між читанням і записом хтось самостійно створив
       // рядок на той самий (userId, date) — не падаємо на unique, просто пропускаємо
@@ -516,6 +665,55 @@ export class ScheduleGeneratorService {
     };
   }
 
+  /**
+   * Повертає перехоплені рядки власникам: відділення, часи й ознаку
+   * вихідного — як було до генерації. Використовується і при повторній
+   * генерації, і при відхиленні пропозиції.
+   */
+  private async restoreTakeovers(
+    departmentId: number,
+    weekStart: Date,
+    weekEnd: Date,
+  ): Promise<number> {
+    const taken = await this.prismaService.workSchedule.findMany({
+      where: {
+        departmentId,
+        isDraft: true,
+        takeover: { not: Prisma.DbNull },
+        date: { gte: weekStart, lte: weekEnd },
+      },
+    });
+
+    let restored = 0;
+    for (const row of taken) {
+      const prev = row.takeover as unknown as {
+        departmentId: number;
+        isDayOff: boolean;
+        startedAt: string;
+        endTime: string;
+      } | null;
+
+      // Postgres розрізняє SQL NULL і JSON null, і фільтр `not: DbNull`
+      // другий пропускає. Без цієї перевірки такий рядок дав би падіння.
+      if (!prev || typeof prev.departmentId !== 'number') continue;
+      restored += 1;
+
+      await this.prismaService.workSchedule.update({
+        where: { id: row.id },
+        data: {
+          departmentId: prev.departmentId,
+          isDayOff: prev.isDayOff,
+          startedAt: prev.startedAt,
+          endTime: prev.endTime,
+          isDraft: false,
+          takeover: Prisma.DbNull,
+        },
+      });
+    }
+
+    return restored;
+  }
+
   async publishWeek(departmentId: number, dateISO: string) {
     const { weekStart, weekEnd } = weekBounds(new Date(dateISO));
 
@@ -533,9 +731,11 @@ export class ScheduleGeneratorService {
       distinct: ['userId'],
     });
 
+    // Публікація закріплює й перехоплення: знімок «як було» більше не
+    // потрібен, інакше наступне «Відхилити» відкотило б уже чинний графік.
     const result = await this.prismaService.workSchedule.updateMany({
       where: draftFilter,
-      data: { isDraft: false },
+      data: { isDraft: false, takeover: Prisma.DbNull },
     });
 
     // Раніше публікація лише слала WS-подію: хто був офлайн, не дізнавався,
@@ -555,6 +755,15 @@ export class ScheduleGeneratorService {
 
   async rejectWeek(departmentId: number, dateISO: string) {
     const { weekStart, weekEnd } = weekBounds(new Date(dateISO));
+
+    // Спершу віддаємо перехоплені рядки власникам — інакше deleteMany
+    // знищив би чужі зміни разом зі своїми чернетками.
+    const restored = await this.restoreTakeovers(
+      departmentId,
+      weekStart,
+      weekEnd,
+    );
+
     const result = await this.prismaService.workSchedule.deleteMany({
       where: {
         departmentId,
@@ -563,6 +772,6 @@ export class ScheduleGeneratorService {
       },
     });
     this.eventsGateway.server.emit('invalidate_schedules');
-    return { discarded: result.count };
+    return { discarded: result.count, restored };
   }
 }

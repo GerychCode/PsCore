@@ -30,6 +30,8 @@ describe('ScheduleGeneratorService.computeAssignments', () => {
     busyUserIds: opts.busyUserIds ?? [],
     coveredCount: opts.coveredCount ?? 0,
     wishUserIds: opts.wishUserIds ?? [],
+    dayOffUserIds: opts.dayOffUserIds ?? [],
+    borrowableUserIds: opts.borrowableUserIds ?? [],
     shiftHours: opts.shiftHours ?? 8,
     startHour: opts.startHour ?? 9,
     endHour: opts.endHour ?? 17,
@@ -124,6 +126,58 @@ describe('ScheduleGeneratorService.computeAssignments', () => {
         { maxHoursPerWeek: 0, maxConsecutiveDays: 0, minRestHours: 0 },
       );
       expect(assignments).toHaveLength(5);
+    });
+  });
+
+  describe('крайні заходи: вихідний і переведення', () => {
+    it('звичайний кандидат завжди дорожчий за власний вихідний', () => {
+      const days = [day(1, 1, { dayOffUserIds: [1] })];
+      const { assignments } = service.computeAssignments(days, [
+        member(1),
+        member(2),
+      ]);
+      expect(assignments[0].userId).toBe(2);
+      expect(assignments[0].source).toBe('NEW');
+    });
+
+    it('вихідний займається, якщо інакше день не закрити', () => {
+      const days = [day(1, 1, { dayOffUserIds: [1] })];
+      const { assignments, warnings } = service.computeAssignments(days, [
+        member(1),
+      ]);
+      expect(assignments[0].source).toBe('DAY_OFF');
+      expect(warnings.some((w) => w.type === 'DAY_OFF_TAKEN')).toBe(true);
+    });
+
+    it('переведення дорожче за вихідний — беруть вихідний', () => {
+      const days = [
+        day(1, 1, { dayOffUserIds: [1], borrowableUserIds: [2] }),
+      ];
+      const { assignments } = service.computeAssignments(days, [
+        member(1),
+        member(2),
+      ]);
+      expect(assignments[0].userId).toBe(1);
+      expect(assignments[0].source).toBe('DAY_OFF');
+    });
+
+    it('переведення — останній варіант, і про нього попереджають', () => {
+      const days = [day(1, 1, { borrowableUserIds: [2] })];
+      const { assignments, warnings } = service.computeAssignments(days, [
+        member(2),
+      ]);
+      expect(assignments[0].source).toBe('BORROW');
+      expect(warnings.some((w) => w.type === 'BORROWED')).toBe(true);
+    });
+
+    it('обмеження навантаження тверді й для крайніх заходів', () => {
+      const days = [day(1, 1, { borrowableUserIds: [2] })];
+      const { assignments } = service.computeAssignments(
+        days,
+        [{ ...member(2), plannedHours: 40 }],
+        { maxHoursPerWeek: 40, maxConsecutiveDays: 0, minRestHours: 0 },
+      );
+      expect(assignments).toHaveLength(0);
     });
   });
 
@@ -225,7 +279,10 @@ describe('ScheduleGeneratorService (БД-оркестрація)', () => {
 
   beforeEach(() => {
     prisma = {
-      department: { findUnique: jest.fn().mockResolvedValue(department) },
+      department: {
+        findUnique: jest.fn().mockResolvedValue(department),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       user: { findMany: jest.fn().mockResolvedValue([{ id: 2 }]) },
       workSchedule: {
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
