@@ -79,6 +79,12 @@ model Department {
   isActive            Boolean? @default(true) @map("is_active")
   staffingByWeekday   Json?    @map("staffing_by_weekday")
 
+  // Обмеження навантаження для генератора графіка. null = взяти значення
+  // за замовчуванням з коду (див. DEFAULT_LOAD_LIMITS); 0 = обмеження вимкнено.
+  maxHoursPerWeek     Int?     @map("max_hours_per_week")
+  maxConsecutiveDays  Int?     @map("max_consecutive_days")
+  minRestHours        Int?     @map("min_rest_hours")
+
   shiftDepartments    WorkShift[]
   scheduleDepartments WorkSchedule[]
   scheduleLocks       WorkScheduleLock[]

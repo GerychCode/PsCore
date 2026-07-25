@@ -1,10 +1,12 @@
 import {
   IsBoolean,
   IsNotEmpty,
+  IsInt,
   IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  Min,
   Matches,
 } from 'class-validator';
 
@@ -53,4 +55,21 @@ export class CreateDepartmentDto {
   @IsOptional()
   @IsObject({ message: 'Штат має бути обʼєктом днів тижня.' })
   staffingByWeekday?: Record<string, number>;
+
+  // Обмеження навантаження для генератора графіка.
+  // 0 = обмеження вимкнено; не задано = дефолт із DEFAULT_LOAD_LIMITS.
+  @IsOptional()
+  @IsInt({ message: 'maxHoursPerWeek має бути цілим числом.' })
+  @Min(0)
+  maxHoursPerWeek?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'maxConsecutiveDays має бути цілим числом.' })
+  @Min(0)
+  maxConsecutiveDays?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'minRestHours має бути цілим числом.' })
+  @Min(0)
+  minRestHours?: number;
 }

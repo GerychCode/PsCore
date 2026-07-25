@@ -30,6 +30,8 @@ describe('ScheduleGeneratorService.computeAssignments', () => {
     coveredCount: opts.coveredCount ?? 0,
     wishUserIds: opts.wishUserIds ?? [],
     shiftHours: opts.shiftHours ?? 8,
+    startHour: opts.startHour ?? 9,
+    endHour: opts.endHour ?? 17,
   });
 
   it('заповнює потрібну к-сть слотів на день', () => {
@@ -46,6 +48,82 @@ describe('ScheduleGeneratorService.computeAssignments', () => {
     const { assignments, warnings } = service.computeAssignments(days, members);
     expect(assignments).toHaveLength(2);
     expect(warnings.some((w) => w.type === 'UNDERSTAFFED')).toBe(true);
+  });
+
+  describe('обмеження навантаження', () => {
+    // 5 днів по 8 год, штат 1 на день, один-єдиний працівник
+    const fiveDays = () =>
+      [1, 2, 3, 4, 5].map((weekday) =>
+        day(weekday, 1, { shiftHours: 8, startHour: 9, endHour: 17 }),
+      );
+
+    it('тижневий ліміт годин обриває призначення', () => {
+      const { assignments, warnings } = service.computeAssignments(
+        fiveDays(),
+        [member(1)],
+        { maxHoursPerWeek: 24, maxConsecutiveDays: 0, minRestHours: 0 },
+      );
+      // 24 год / 8 = максимум 3 дні
+      expect(assignments).toHaveLength(3);
+      expect(warnings.some((w) => w.type === 'LIMIT_BLOCKED')).toBe(true);
+    });
+
+    it('ліміт днів поспіль не допускає надто довгої серії', () => {
+      const { assignments } = service.computeAssignments(
+        fiveDays(),
+        [member(1)],
+        { maxHoursPerWeek: 0, maxConsecutiveDays: 3, minRestHours: 0 },
+      );
+
+      // Перевіряємо саме властивість, а не кількість: після розриву серія
+      // починається заново, тож 1-2-3 + 5 — коректний результат.
+      const assigned = new Set(assignments.map((a) => a.weekday));
+      let longestRun = 0;
+      let run = 0;
+      for (let d = 1; d <= 7; d++) {
+        run = assigned.has(d) ? run + 1 : 0;
+        longestRun = Math.max(longestRun, run);
+      }
+      expect(longestRun).toBeLessThanOrEqual(3);
+      expect(assignments.length).toBeGreaterThan(0);
+    });
+
+    it('вже заплановані години зараховуються в тижневий ліміт', () => {
+      const withPlanned: GenMember = {
+        ...member(1),
+        plannedHours: 32,
+        plannedWeekdays: [],
+      };
+      const { assignments } = service.computeAssignments(
+        fiveDays(),
+        [withPlanned],
+        { maxHoursPerWeek: 40, maxConsecutiveDays: 0, minRestHours: 0 },
+      );
+      // лишилось 8 год → рівно одна зміна
+      expect(assignments).toHaveLength(1);
+    });
+
+    it('міжзмінний відпочинок блокує суміжний день після довгої зміни', () => {
+      // Зміни 09:00–23:00 (14 год) → між днями лише 10 год відпочинку
+      const longDays = [1, 2].map((weekday) =>
+        day(weekday, 1, { shiftHours: 14, startHour: 9, endHour: 23 }),
+      );
+      const { assignments } = service.computeAssignments(longDays, [member(1)], {
+        maxHoursPerWeek: 0,
+        maxConsecutiveDays: 0,
+        minRestHours: 11,
+      });
+      expect(assignments).toHaveLength(1);
+    });
+
+    it('нульові значення вимикають обмеження', () => {
+      const { assignments } = service.computeAssignments(
+        fiveDays(),
+        [member(1)],
+        { maxHoursPerWeek: 0, maxConsecutiveDays: 0, minRestHours: 0 },
+      );
+      expect(assignments).toHaveLength(5);
+    });
   });
 
   it('враховує published-зміну цього відділу: 1 покрито → потрібен ще 1, і не user 1', () => {

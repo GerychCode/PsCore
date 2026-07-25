@@ -12,7 +12,33 @@ export interface GenMember {
   userId: number;
   level: number;
   reliability: number;
+  /**
+   * Години, вже заплановані цього тижня будь-де (включно з іншими
+   * відділеннями). Без них тижневий ліміт рахувався б лише по цьому запуску,
+   * і людина, яка сама набрала змін, отримувала б ще стільки ж зверху.
+   */
+  plannedHours?: number;
+  /** ISO-дні, на які в людини вже є рядок — база для «днів поспіль». */
+  plannedWeekdays?: number[];
 }
+
+/**
+ * Тверді обмеження навантаження. Значення 0 вимикає конкретне обмеження.
+ * Дефолти орієнтовані на 40-годинний тиждень з одним вихідним і
+ * міжзмінним відпочинком — генератор не має пропонувати те, за що
+ * потім прилетить від інспекції праці.
+ */
+export interface LoadLimits {
+  maxHoursPerWeek: number;
+  maxConsecutiveDays: number;
+  minRestHours: number;
+}
+
+export const DEFAULT_LOAD_LIMITS: LoadLimits = {
+  maxHoursPerWeek: 40,
+  maxConsecutiveDays: 6,
+  minRestHours: 11,
+};
 
 export interface GenDay {
   /** ISO день тижня: 1 = Пн … 7 = Нд */
@@ -26,6 +52,9 @@ export interface GenDay {
   wishUserIds: number[];
   /** Тривалість зміни цього дня в годинах (для рівномірності навантаження) */
   shiftHours: number;
+  /** Початок/кінець зміни в годинах (9.5 = 09:30) — для міжзмінного відпочинку */
+  startHour?: number;
+  endHour?: number;
 }
 
 export interface Assignment {
@@ -35,7 +64,7 @@ export interface Assignment {
 
 export interface GenWarning {
   weekday: number;
-  type: 'UNDERSTAFFED' | 'WISH_VIOLATED';
+  type: 'UNDERSTAFFED' | 'WISH_VIOLATED' | 'LIMIT_BLOCKED';
   message: string;
   userId?: number;
 }
@@ -65,11 +94,75 @@ export class ScheduleGeneratorService {
    * Чисте ядро: розподіляє членів по днях тижня за жадібним скорингом.
    * Не торкається БД — легко тестується.
    */
-  computeAssignments(days: GenDay[], members: GenMember[]): GenResult {
+  /**
+   * Чи не порушить призначення на цей день твердих обмежень навантаження.
+   * Повертає причину відмови або null, якщо все гаразд.
+   */
+  private limitViolation(
+    day: GenDay,
+    state: { hours: number; days: Set<number> },
+    limits: LoadLimits,
+    dayByWeekday: Map<number, GenDay>,
+  ): string | null {
+    if (
+      limits.maxHoursPerWeek > 0 &&
+      state.hours + day.shiftHours > limits.maxHoursPerWeek
+    ) {
+      return 'тижневий ліміт годин';
+    }
+
+    if (limits.maxConsecutiveDays > 0) {
+      // Довжина безперервної серії, у яку потрапить цей день.
+      let run = 1;
+      for (let d = day.weekday - 1; d >= 1 && state.days.has(d); d--) run++;
+      for (let d = day.weekday + 1; d <= 7 && state.days.has(d); d++) run++;
+      if (run > limits.maxConsecutiveDays) {
+        return 'днів поспіль';
+      }
+    }
+
+    if (limits.minRestHours > 0) {
+      // Відпочинок між сусідніми днями: від кінця однієї зміни до початку
+      // наступної. Часи беруться з цього відділення — для змін в іншому
+      // відділенні це наближення, точні часи сюди не доходять.
+      const prev = dayByWeekday.get(day.weekday - 1);
+      const next = dayByWeekday.get(day.weekday + 1);
+      const start = day.startHour ?? 0;
+      const end = day.endHour ?? day.shiftHours;
+
+      if (state.days.has(day.weekday - 1) && prev) {
+        const rest = 24 - (prev.endHour ?? prev.shiftHours) + start;
+        if (rest < limits.minRestHours) return 'відпочинок після попередньої зміни';
+      }
+      if (state.days.has(day.weekday + 1) && next) {
+        const rest = 24 - end + (next.startHour ?? 0);
+        if (rest < limits.minRestHours) return 'відпочинок перед наступною зміною';
+      }
+    }
+
+    return null;
+  }
+
+  computeAssignments(
+    days: GenDay[],
+    members: GenMember[],
+    limits: LoadLimits = DEFAULT_LOAD_LIMITS,
+  ): GenResult {
     const assignments: Assignment[] = [];
     const warnings: GenWarning[] = [];
     // Наростаючі відпрацьовані години на тижні — основа рівномірності
     const assignedHoursByUser = new Map<number, number>();
+
+    // Стан навантаження: стартує з того, що вже заплановано цього тижня,
+    // інакше ліміти рахувалися б лише в межах одного запуску генератора.
+    const loadState = new Map<number, { hours: number; days: Set<number> }>();
+    for (const m of members) {
+      loadState.set(m.userId, {
+        hours: m.plannedHours ?? 0,
+        days: new Set(m.plannedWeekdays ?? []),
+      });
+    }
+    const dayByWeekday = new Map(days.map((d) => [d.weekday, d]));
 
     const activeDays = days.filter((d) => d.required > 0);
     const avgRequired =
@@ -91,8 +184,20 @@ export class ScheduleGeneratorService {
       const wishSet = new Set(day.wishUserIds);
       const isPeak = day.required > avgRequired;
 
-      const pool = members
-        .filter((m) => !busy.has(m.userId))
+      // Обмеження — тверді: кандидат, що їх порушує, не потрапляє в пул
+      // взагалі. Це не питання пріоритету, як побажання вихідного.
+      let blockedByLimits = 0;
+      const eligible = members.filter((m) => {
+        if (busy.has(m.userId)) return false;
+        const state = loadState.get(m.userId)!;
+        if (this.limitViolation(day, state, limits, dayByWeekday)) {
+          blockedByLimits += 1;
+          return false;
+        }
+        return true;
+      });
+
+      const pool = eligible
         .map((m) => {
           const assignedHours = assignedHoursByUser.get(m.userId) ?? 0;
           let score = 0;
@@ -118,6 +223,9 @@ export class ScheduleGeneratorService {
           member.userId,
           (assignedHoursByUser.get(member.userId) ?? 0) + day.shiftHours,
         );
+        const state = loadState.get(member.userId)!;
+        state.hours += day.shiftHours;
+        state.days.add(day.weekday);
         if (wishSet.has(member.userId)) {
           warnings.push({
             weekday: day.weekday,
@@ -136,14 +244,28 @@ export class ScheduleGeneratorService {
             day.coveredCount + picked.length
           } (день ${day.weekday}).`,
         });
+
+        // Окремо повідомляємо, коли людей насправді вистачає, але їх не
+        // пускають обмеження: це керований випадок (підняти ліміт, найняти,
+        // перерозподілити), а не той самий «нема кого ставити».
+        if (blockedByLimits > 0) {
+          warnings.push({
+            weekday: day.weekday,
+            type: 'LIMIT_BLOCKED',
+            message:
+              `День ${day.weekday}: ${blockedByLimits} прац. не призначено ` +
+              'через обмеження навантаження (години на тиждень / дні поспіль / відпочинок).',
+          });
+        }
       }
     }
 
     return { assignments, warnings };
   }
 
-  /** Тривалість зміни в годинах з рядків "HH:mm". */
-  private shiftLengthHours(start: string, end: string): number {
+  /** Тривалість зміни в годинах з рядків "HH:mm". Порожні часи — 0 годин. */
+  private shiftLengthHours(start?: string | null, end?: string | null): number {
+    if (!start || !end) return 0;
     const [sh, sm] = start.split(':').map(Number);
     const [eh, em] = end.split(':').map(Number);
     const minutes = eh * 60 + em - (sh * 60 + sm);
@@ -200,6 +322,15 @@ export class ScheduleGeneratorService {
       reliability: l.reliability,
     }));
 
+    const limits: LoadLimits = {
+      maxHoursPerWeek:
+        department.maxHoursPerWeek ?? DEFAULT_LOAD_LIMITS.maxHoursPerWeek,
+      maxConsecutiveDays:
+        department.maxConsecutiveDays ?? DEFAULT_LOAD_LIMITS.maxConsecutiveDays,
+      minRestHours:
+        department.minRestHours ?? DEFAULT_LOAD_LIMITS.minRestHours,
+    };
+
     // Спершу прибираємо стару чернетку цього відділу — щоб не рахувати її як зайнятість
     await this.prismaService.workSchedule.deleteMany({
       where: {
@@ -219,6 +350,9 @@ export class ScheduleGeneratorService {
           departmentId: true,
           isDraft: true,
           isDayOff: true,
+          // потрібні, щоб порахувати вже заплановані години для лімітів
+          startedAt: true,
+          endTime: true,
         },
       }),
       this.prismaService.scheduleWish.findMany({
@@ -265,6 +399,12 @@ export class ScheduleGeneratorService {
         .filter((w) => getISODay(w.date) === weekday)
         .map((w) => w.userId);
 
+      const weekend = this.isWeekend(weekday);
+      const toHours = (hhmm: string) => {
+        const [h, m] = hhmm.split(':').map(Number);
+        return h + m / 60;
+      };
+
       return {
         weekday,
         required,
@@ -272,12 +412,39 @@ export class ScheduleGeneratorService {
         coveredCount,
         wishUserIds,
         shiftHours: weekdayHours(weekday),
+        startHour: toHours(
+          weekend
+            ? department.weekendsOpeningTime
+            : department.weekdaysOpeningTime,
+        ),
+        endHour: toHours(
+          weekend
+            ? department.weekendsClosingTime
+            : department.weekdaysClosingTime,
+        ),
       };
     });
+
+    // Вже заплановані цього тижня години й дні — база для лімітів. Рахуємо
+    // по ВСІХ відділеннях: ліміт стосується людини, а не відділення.
+    const plannedByUser = new Map<number, { hours: number; days: number[] }>();
+    for (const s of existingSchedules) {
+      if (!memberIds.has(s.userId) || s.isDayOff) continue;
+      const entry = plannedByUser.get(s.userId) ?? { hours: 0, days: [] };
+      entry.hours += this.shiftLengthHours(s.startedAt, s.endTime);
+      entry.days.push(getISODay(s.date));
+      plannedByUser.set(s.userId, entry);
+    }
+    for (const m of genMembers) {
+      const planned = plannedByUser.get(m.userId);
+      m.plannedHours = planned?.hours ?? 0;
+      m.plannedWeekdays = planned?.days ?? [];
+    }
 
     const { assignments, warnings } = this.computeAssignments(
       genDays,
       genMembers,
+      limits,
     );
 
     const weekdayToDate = new Map(weekDays.map((d) => [getISODay(d), d]));
