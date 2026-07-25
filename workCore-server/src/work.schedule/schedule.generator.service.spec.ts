@@ -5,7 +5,12 @@ describe('ScheduleGeneratorService.computeAssignments', () => {
 
   beforeEach(() => {
     // Чисте ядро не торкається залежностей
-    service = new ScheduleGeneratorService(null as any, null as any, null as any);
+    service = new ScheduleGeneratorService(
+      null as any,
+      null as any,
+      null as any,
+      null as any,
+    );
   });
 
   const member = (userId: number, level = 1, reliability = 0): GenMember => ({
@@ -119,5 +124,180 @@ describe('ScheduleGeneratorService.computeAssignments', () => {
     const members = [member(3), member(1), member(2)];
     const { assignments } = service.computeAssignments(days, members);
     expect(assignments[0].userId).toBe(1);
+  });
+});
+
+describe('ScheduleGeneratorService (БД-оркестрація)', () => {
+  let service: ScheduleGeneratorService;
+  let prisma: any;
+  let levels: any;
+  let events: any;
+  let notifications: any;
+
+  const department = {
+    id: 1,
+    staffingByWeekday: { '1': 1 },
+    weekdaysOpeningTime: '09:00',
+    weekdaysClosingTime: '18:00',
+    weekendsOpeningTime: '10:00',
+    weekendsClosingTime: '16:00',
+  };
+
+  beforeEach(() => {
+    prisma = {
+      department: { findUnique: jest.fn().mockResolvedValue(department) },
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 2 }]) },
+      workSchedule: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findMany: jest.fn().mockResolvedValue([]),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 3 }),
+      },
+      scheduleWish: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    levels = {
+      getEmployeeLevel: jest
+        .fn()
+        .mockResolvedValue({ userId: 2, level: 1, reliability: 0 }),
+    };
+    events = { server: { emit: jest.fn() } };
+    notifications = { createNotification: jest.fn().mockResolvedValue(null) };
+    service = new ScheduleGeneratorService(
+      prisma,
+      levels,
+      events,
+      notifications,
+    );
+  });
+
+  describe('generateWeek', () => {
+    it('створює чернетки й повертає {created, warnings}', async () => {
+      // побажання вихідного цього дня — покриває фільтр wishUserIds
+      prisma.scheduleWish.findMany.mockResolvedValue([
+        { userId: 2, date: new Date('2026-06-01') },
+      ]);
+      const res = await service.generateWeek(1, '2026-06-01'); // понеділок
+      expect(prisma.workSchedule.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skipDuplicates: true }),
+      );
+      expect(events.server.emit).toHaveBeenCalledWith('invalidate_schedules');
+      expect(res.created).toBe(1);
+    });
+
+    it('вихідний у цьому відділенні НЕ зараховується як покритий слот', async () => {
+      // Опублікований вихідний user 2 на понеділок: людина того дня не працює,
+      // тож потреба лишається, і генератор мусить когось поставити.
+      prisma.workSchedule.findMany.mockResolvedValue([
+        {
+          userId: 2,
+          date: new Date('2026-06-01'),
+          departmentId: 1,
+          isDraft: false,
+          isDayOff: true,
+        },
+      ]);
+      prisma.user.findMany.mockResolvedValue([{ id: 2 }, { id: 3 }]);
+      levels.getEmployeeLevel.mockImplementation((id: number) =>
+        Promise.resolve({ userId: id, level: 1, reliability: 0 }),
+      );
+
+      await service.generateWeek(1, '2026-06-01');
+
+      // штат у фікстурі — лише понеділок ({'1': 1}), тож усі рядки саме за нього
+      const rows = prisma.workSchedule.createMany.mock.calls[0][0].data;
+      // user 2 зайнятий (вихідний), тож слот має закрити user 3
+      expect(rows).toHaveLength(1);
+      expect(rows[0].userId).toBe(3);
+    });
+
+    it('пропущені через гонку рядки дають UNDERSTAFFED', async () => {
+      // createMany вставив менше, ніж просили
+      prisma.workSchedule.createMany.mockResolvedValue({ count: 0 });
+      const res = await service.generateWeek(1, '2026-06-01');
+      expect(res.created).toBe(0);
+      expect(res.warnings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'UNDERSTAFFED' }),
+        ]),
+      );
+    });
+
+    it('відділення не знайдено → BadRequest', async () => {
+      prisma.department.findUnique.mockResolvedValue(null);
+      await expect(service.generateWeek(1, '2026-06-01')).rejects.toThrow(
+        'Відділення не знайдено.',
+      );
+    });
+
+    it('штат не заданий → BadRequest', async () => {
+      prisma.department.findUnique.mockResolvedValue({
+        ...department,
+        staffingByWeekday: {},
+      });
+      await expect(service.generateWeek(1, '2026-06-01')).rejects.toThrow(
+        /штат/i,
+      );
+    });
+
+    it('немає членів команди → BadRequest', async () => {
+      prisma.user.findMany.mockResolvedValue([]);
+      await expect(service.generateWeek(1, '2026-06-01')).rejects.toThrow(
+        /співробітник/i,
+      );
+    });
+
+    it('порожній результат — createMany не викликається', async () => {
+      // штат є, але жоден день не потребує (усі 0) → rows порожні
+      prisma.department.findUnique.mockResolvedValue({
+        ...department,
+        staffingByWeekday: { '1': 0, '3': 0 },
+      });
+      // щоб пройти перевірку totalStaff>0 — додамо додатний, але без кандидатів
+      prisma.department.findUnique.mockResolvedValue({
+        ...department,
+        staffingByWeekday: { '1': 1 },
+      });
+      prisma.workSchedule.findMany.mockResolvedValue([]);
+      prisma.user.findMany.mockResolvedValue([{ id: 2 }]);
+      // busy усіх → нема кого призначити
+      prisma.workSchedule.findMany.mockResolvedValue([
+        { userId: 2, date: new Date('2026-06-01'), departmentId: 9, isDraft: false },
+      ]);
+      const res = await service.generateWeek(1, '2026-06-01');
+      expect(res.created).toBe(0);
+    });
+  });
+
+  describe('publishWeek сповіщає', () => {
+    it('шле повідомлення кожному, чию чернетку опублікували', async () => {
+      prisma.workSchedule.findMany.mockResolvedValue([
+        { userId: 2 },
+        { userId: 3 },
+      ]);
+      await service.publishWeek(1, '2026-06-01');
+      expect(notifications.createNotification).toHaveBeenCalledTimes(2);
+      expect(notifications.createNotification).toHaveBeenCalledWith(
+        2,
+        expect.objectContaining({ title: 'Графік опубліковано' }),
+      );
+    });
+  });
+
+  describe('publishWeek', () => {
+    it('знімає isDraft і повертає {published}', async () => {
+      const res = await service.publishWeek(1, '2026-06-01');
+      expect(prisma.workSchedule.updateMany).toHaveBeenCalled();
+      expect(events.server.emit).toHaveBeenCalledWith('invalidate_schedules');
+      expect(res.published).toBe(3);
+    });
+  });
+
+  describe('rejectWeek', () => {
+    it('видаляє чернетки і повертає {discarded}', async () => {
+      prisma.workSchedule.deleteMany.mockResolvedValue({ count: 2 });
+      const res = await service.rejectWeek(1, '2026-06-01');
+      expect(res.discarded).toBe(2);
+      expect(events.server.emit).toHaveBeenCalledWith('invalidate_schedules');
+    });
   });
 });

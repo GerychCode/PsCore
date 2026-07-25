@@ -25,10 +25,10 @@ describe('WorkScheduleController', () => {
     controller = new WorkScheduleController(service, generator);
   });
 
-  it('getWorkSchedules делегує з фільтром', async () => {
+  it('getWorkSchedules делегує з користувачем і фільтром', async () => {
     const filter = { userId: 1 } as any;
-    await controller.getWorkSchedules(filter);
-    expect(service.getWorkSchedules).toHaveBeenCalledWith(filter);
+    await controller.getWorkSchedules(user, filter);
+    expect(service.getWorkSchedules).toHaveBeenCalledWith(user, filter);
   });
 
   it('getWeekView делегує з датою і прапорцем адміна', async () => {

@@ -1,13 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import {
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  getISODay,
-} from 'date-fns';
+import { eachDayOfInterval, formatISO, getISODay } from 'date-fns';
+import { weekBounds } from '../common/utils/week.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmployeeLevelService } from '../employee.level/employee.level.service';
 import { EventsGateway } from '../events/events.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const MAX_LEVEL = 10;
 
@@ -61,6 +58,7 @@ export class ScheduleGeneratorService {
     private readonly prismaService: PrismaService,
     private readonly employeeLevelService: EmployeeLevelService,
     private readonly eventsGateway: EventsGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -189,8 +187,7 @@ export class ScheduleGeneratorService {
     }
 
     const targetDate = new Date(dateISO);
-    const weekStart = startOfWeek(targetDate, { weekStartsOn: 1 });
-    const weekEnd = endOfWeek(targetDate, { weekStartsOn: 1 });
+    const { weekStart, weekEnd } = weekBounds(targetDate);
     const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
     // Рівні членів (LVL + надійність) — вхід для скорингу
@@ -216,7 +213,13 @@ export class ScheduleGeneratorService {
     const [existingSchedules, wishes] = await Promise.all([
       this.prismaService.workSchedule.findMany({
         where: { date: { gte: weekStart, lte: weekEnd } },
-        select: { userId: true, date: true, departmentId: true, isDraft: true },
+        select: {
+          userId: true,
+          date: true,
+          departmentId: true,
+          isDraft: true,
+          isDayOff: true,
+        },
       }),
       this.prismaService.scheduleWish.findMany({
         where: {
@@ -250,9 +253,12 @@ export class ScheduleGeneratorService {
         .filter((s) => memberIds.has(s.userId))
         .map((s) => s.userId);
 
-      // Скільки слотів САМЕ цього відділу вже закрито (published цього відділу)
+      // Скільки слотів САМЕ цього відділу вже закрито (published цього відділу).
+      // Вихідний слот НЕ закриває: людина того дня не працює. Без цієї умови
+      // виставлений собі вихідний тихо зменшував потребу, і зміна виходила
+      // недоукомплектованою навіть без попередження UNDERSTAFFED.
       const coveredCount = sameDay.filter(
-        (s) => s.departmentId === departmentId && !s.isDraft,
+        (s) => s.departmentId === departmentId && !s.isDraft && !s.isDayOff,
       ).length;
 
       const wishUserIds = wishes
@@ -293,34 +299,77 @@ export class ScheduleGeneratorService {
       };
     });
 
+    let created = 0;
     if (rows.length > 0) {
-      await this.prismaService.workSchedule.createMany({ data: rows });
+      // skipDuplicates: якщо між читанням і записом хтось самостійно створив
+      // рядок на той самий (userId, date) — не падаємо на unique, просто пропускаємо
+      const result = await this.prismaService.workSchedule.createMany({
+        data: rows,
+        skipDuplicates: true,
+      });
+      created = result.count;
+    }
+
+    // Пропущені через гонку рядки — це реальний недокомплект, про який
+    // computeAssignments знати не міг: він рахував попередження ДО вставки.
+    const skipped = rows.length - created;
+    if (skipped > 0) {
+      warnings.push({
+        weekday: 0,
+        type: 'UNDERSTAFFED',
+        message:
+          `Не додано ${skipped} признач${skipped === 1 ? 'ення' : 'ень'}: ` +
+          'графік на ці дні змінили під час генерації. Перевірте покриття.',
+      });
     }
 
     this.eventsGateway.server.emit('invalidate_schedules');
 
     return {
-      created: rows.length,
+      created,
       warnings,
     };
   }
 
   async publishWeek(departmentId: number, dateISO: string) {
-    const { weekStart, weekEnd } = this.weekBounds(dateISO);
+    const { weekStart, weekEnd } = weekBounds(new Date(dateISO));
+
+    const draftFilter = {
+      departmentId,
+      isDraft: true,
+      date: { gte: weekStart, lte: weekEnd },
+    };
+
+    // Кого саме публікуємо — треба знати ДО updateMany, бо після нього
+    // чернеток уже не існує і адресатів не відновити.
+    const drafts = await this.prismaService.workSchedule.findMany({
+      where: draftFilter,
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+
     const result = await this.prismaService.workSchedule.updateMany({
-      where: {
-        departmentId,
-        isDraft: true,
-        date: { gte: weekStart, lte: weekEnd },
-      },
+      where: draftFilter,
       data: { isDraft: false },
     });
+
+    // Раніше публікація лише слала WS-подію: хто був офлайн, не дізнавався,
+    // що графік вийшов.
+    const weekLabel = formatISO(weekStart, { representation: 'date' });
+    for (const { userId } of drafts) {
+      await this.notificationsService.createNotification(userId, {
+        title: 'Графік опубліковано',
+        message: `Опубліковано графік на тиждень з ${weekLabel}. Перевірте свої зміни.`,
+        category: 'schedule',
+      });
+    }
+
     this.eventsGateway.server.emit('invalidate_schedules');
     return { published: result.count };
   }
 
   async rejectWeek(departmentId: number, dateISO: string) {
-    const { weekStart, weekEnd } = this.weekBounds(dateISO);
+    const { weekStart, weekEnd } = weekBounds(new Date(dateISO));
     const result = await this.prismaService.workSchedule.deleteMany({
       where: {
         departmentId,
@@ -330,13 +379,5 @@ export class ScheduleGeneratorService {
     });
     this.eventsGateway.server.emit('invalidate_schedules');
     return { discarded: result.count };
-  }
-
-  private weekBounds(dateISO: string) {
-    const targetDate = new Date(dateISO);
-    return {
-      weekStart: startOfWeek(targetDate, { weekStartsOn: 1 }),
-      weekEnd: endOfWeek(targetDate, { weekStartsOn: 1 }),
-    };
   }
 }
