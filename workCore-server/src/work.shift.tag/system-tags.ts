@@ -47,6 +47,13 @@ export const SYSTEM_TAGS = {
     color: '#0EA5E9',
     description: 'Зміну завершено раніше за запланований у графіку час.',
   },
+  FAR_FROM_SITE: {
+    name: 'Далеко від відділення',
+    severity: 2,
+    color: '#D97706',
+    description:
+      'Зміну відкрито за межами дозволеного радіуса відділення (за геопозицією).',
+  },
   OVERTIME: {
     name: 'Понаднормово',
     severity: 1,

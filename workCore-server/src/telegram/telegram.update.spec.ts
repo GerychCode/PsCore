@@ -30,7 +30,11 @@ describe('TelegramUpdate', () => {
         update: jest.fn(),
       },
       workSchedule: { findFirst: jest.fn() },
-      department: { findMany: jest.fn().mockResolvedValue([]) },
+      department: {
+        findMany: jest.fn().mockResolvedValue([]),
+        // геоперевірка вимкнена за замовчуванням у тестах
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       tag: {
         upsert: jest.fn().mockResolvedValue({ id: 99 }),
       },

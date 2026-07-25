@@ -6,6 +6,7 @@ import {
   Help,
   Action,
   Command,
+  On,
 } from 'nestjs-telegraf';
 import { Context, Markup } from 'telegraf';
 import { Injectable, Inject, Logger } from '@nestjs/common';
@@ -56,7 +57,11 @@ interface ShiftVerification {
   /** ISO-час натискання кнопки — саме він стає часом початку зміни */
   pressedAt: string;
   attempts: number;
+  /** Геопозиція, надіслана до введення коду (якщо ділився) */
+  coords?: { latitude: number; longitude: number };
 }
+
+const VERIFY_MINUTES = Math.round(SHIFT_VERIFY_TTL_SEC / 60);
 
 @Update()
 @Injectable()
@@ -241,7 +246,7 @@ export class TelegramUpdate {
         check.departmentTelegramId,
         `🔐 <b>${fullName(user)}</b> виходить на зміну.\n` +
           `Код підтвердження: <code>${code}</code>\n` +
-          'Дійсний 10 хвилин.',
+          `Дійсний ${VERIFY_MINUTES} хв.`,
         { parse_mode: 'HTML' },
       );
     } catch (error) {
@@ -263,10 +268,36 @@ export class TelegramUpdate {
       SHIFT_VERIFY_TTL_SEC,
     );
 
+    // Геоперевірка вмикається на рівні відділення; якщо вона є — просимо
+    // поділитися позицією. Відмова не блокує старт, лише лишає зміну
+    // без підтвердження місця (GPS у приміщенні часто бреше).
+    const geo = await this.prismaService.department.findUnique({
+      where: { id: check.departmentId },
+      select: { geofenceRadiusM: true, latitude: true, longitude: true },
+    });
+    const geofenceOn =
+      !!geo?.geofenceRadiusM &&
+      geo.geofenceRadiusM > 0 &&
+      geo.latitude != null &&
+      geo.longitude != null;
+
+    if (geofenceOn) {
+      await ctx.reply(
+        '📍 Це відділення перевіряє місце відкриття зміни. ' +
+          'Надішліть геолокацію — це не обовʼязково, але без неї зміна ' +
+          'лишиться без підтвердження місця.',
+        Markup.keyboard([
+          [Markup.button.locationRequest('📍 Надіслати геолокацію')],
+        ])
+          .resize()
+          .oneTime(),
+      );
+    }
+
     await ctx.replyWithHTML(
       `📲 На акаунт відділення «${check.departmentName}» надіслано ` +
         '4-значний код підтвердження.\n\n' +
-        'Введіть його тут протягом <b>10 хвилин</b>.\n' +
+        `Введіть його тут протягом <b>${VERIFY_MINUTES} хв</b>.\n` +
         `🕓 Час початку зміни зафіксовано: <b>${format(pressedAt, 'HH:mm')}</b>` +
         (check.offSchedule
           ? '\n📌 Зміну буде позначено тегом «Поза графіком».'
@@ -322,8 +353,46 @@ export class TelegramUpdate {
       user.id,
       verification.departmentId,
       new Date(verification.pressedAt),
+      verification.coords ?? null,
     );
     await this.replyStartShiftResult(ctx, r);
+  }
+
+  /**
+   * Геопозиція під час очікування коду. Прив'язуємо її до запиту, який уже
+   * триває: окремої «сесії геолокації» немає, і надіслана поза потоком
+   * позиція нічого не робить.
+   */
+  @On('location')
+  async onLocation(@Ctx() ctx: Context) {
+    const user = await this.findUser(ctx);
+    if (!user) return;
+
+    const verification = await this.getVerification(user.id);
+    if (!verification) {
+      await ctx.reply(
+        'ℹ️ Зараз немає активного запиту на початок зміни, ' +
+          'тож геолокація не потрібна.',
+        menuIdle,
+      );
+      return;
+    }
+
+    const location = (ctx.message as any).location;
+    verification.coords = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+    };
+    await this.redisClient.set(
+      `${SHIFT_VERIFY_KEY}${user.id}`,
+      JSON.stringify(verification),
+      'KEEPTTL',
+    );
+
+    await ctx.reply(
+      '📍 Геопозицію отримано. Тепер введіть код підтвердження.',
+      Markup.removeKeyboard(),
+    );
   }
 
   @Action('verify:cancel')

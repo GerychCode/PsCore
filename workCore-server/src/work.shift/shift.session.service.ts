@@ -11,6 +11,7 @@ import {
 } from '../work.shift.tag/system-tags';
 import { TagRuleEngine } from '../work.shift.tag/tag-rule.engine';
 import { ShiftRuleContext } from '../work.shift.tag/tag-rule.types';
+import { Coords, isWithinRadius } from '../common/utils/geo';
 
 export type ShiftStartCheck =
   | { status: 'ALREADY_ACTIVE'; startedAt?: string }
@@ -237,10 +238,33 @@ export class ShiftSessionService {
    * час початку раніше за момент виклику (напр., момент натискання кнопки
    * в боті, до проходження верифікації).
    */
+  /**
+   * Тег «далеко від відділення», якщо геоперевірка увімкнена і позиція
+   * працівника поза радіусом. Невідома позиція тегу не дає: див. коментар
+   * до isWithinRadius — це позначка, а не заборона працювати.
+   */
+  private async resolveGeoTags(
+    departmentId: number,
+    coords?: Coords | null,
+  ): Promise<{ id: number }[]> {
+    const department = await this.prismaService.department.findUnique({
+      where: { id: departmentId },
+      select: { latitude: true, longitude: true, geofenceRadiusM: true },
+    });
+    if (!department) return [];
+
+    const result = isWithinRadius(department, department.geofenceRadiusM, coords);
+    if (!result || result.within) return [];
+
+    const tag = await this.getSystemTag(SYSTEM_TAGS.FAR_FROM_SITE);
+    return [{ id: tag.id }];
+  }
+
   async startShift(
     userId: number,
     offScheduleDepartmentId?: number,
     startedAt?: Date,
+    coords?: Coords | null,
   ): Promise<StartShiftResult> {
     const check = await this.checkShiftStart(userId, offScheduleDepartmentId);
     if (check.status !== 'OK') return check;
@@ -248,7 +272,10 @@ export class ShiftSessionService {
     const startMoment = startedAt ?? new Date();
     const schedule = await this.findTodaySchedule(userId, startMoment);
     const currentTime = format(startMoment, 'HH:mm');
-    const tagsToConnect = await this.resolveScheduleTags(schedule, currentTime);
+    const tagsToConnect = [
+      ...(await this.resolveScheduleTags(schedule, currentTime)),
+      ...(await this.resolveGeoTags(check.departmentId, coords)),
+    ];
 
     // Атомарний старт: advisory-lock по userId серіалізує паралельні спроби
     // (веб+бот / подвійний тап), а повторна перевірка активної зміни всередині

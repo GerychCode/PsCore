@@ -85,6 +85,10 @@ model Department {
   maxConsecutiveDays  Int?     @map("max_consecutive_days")
   minRestHours        Int?     @map("min_rest_hours")
 
+  // Радіус (метри), у якому вважається, що зміну відкрито на місці.
+  // null або 0 = геоперевірка вимкнена. Потребує заповнених latitude/longitude.
+  geofenceRadiusM     Int?     @map("geofence_radius_m")
+
   shiftDepartments    WorkShift[]
   scheduleDepartments WorkSchedule[]
   scheduleLocks       WorkScheduleLock[]

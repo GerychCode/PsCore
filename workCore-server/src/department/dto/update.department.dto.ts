@@ -76,4 +76,10 @@ export class UpdateDepartmentDto {
   @IsInt({ message: 'minRestHours має бути цілим числом.' })
   @Min(0)
   minRestHours?: number;
+
+  // Радіус (м), у якому зміна вважається відкритою на місці. 0 = вимкнено.
+  @IsOptional()
+  @IsInt({ message: 'geofenceRadiusM має бути цілим числом.' })
+  @Min(0)
+  geofenceRadiusM?: number;
 }
