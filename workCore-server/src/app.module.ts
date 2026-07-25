@@ -11,15 +11,20 @@ import { WorkShiftTagModule } from './work.shift.tag/work.shift.tag.module';
 import { EmployeeLevelModule } from './employee.level/employee.level.module';
 
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
+import { SecurityHeadersMiddleware } from './common/middleware/security-headers.middleware';
 import { TelegramModule } from './telegram/telegram.module';
 import { TelegrafModule } from 'nestjs-telegraf';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { HttpThrottlerGuard } from './common/guard/http-throttler.guard';
 import { ChatModule } from './chat/chat.module';
 import { ScheduleWishModule } from './schedule.wish/schedule.wish.module';
 import { MailModule } from './mail/mail.module';
 import { RolesModule } from './roles/roles.module';
 import { InvitationsModule } from './invitations/invitations.module';
+import { AuditModule } from './audit/audit.module';
+import { AuditHttpModule } from './audit/audit.http.module';
+import { ShiftSwapModule } from './shift.swap/shift.swap.module';
 
 @Module({
   imports: [
@@ -51,17 +56,22 @@ import { InvitationsModule } from './invitations/invitations.module';
     MailModule,
     RolesModule,
     InvitationsModule,
+    AuditModule,
+    AuditHttpModule,
+    ShiftSwapModule,
   ],
   controllers: [],
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: HttpThrottlerGuard,
     },
   ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggerMiddleware).forRoutes('*');
+    consumer
+      .apply(SecurityHeadersMiddleware, LoggerMiddleware)
+      .forRoutes('*');
   }
 }

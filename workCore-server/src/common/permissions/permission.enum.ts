@@ -11,6 +11,7 @@ export enum Permission {
   APPROVE_SHIFTS = 'APPROVE_SHIFTS', // підтвердження/відхилення чужих змін
   MANAGE_TAGS = 'MANAGE_TAGS', // CRUD тегів змін
   VIEW_ALL_PROFILES = 'VIEW_ALL_PROFILES', // перегляд чутливих полів усіх профілів
+  VIEW_AUDIT_LOG = 'VIEW_AUDIT_LOG', // перегляд журналу аудиту
 }
 
 export const ALL_PERMISSIONS: Permission[] = Object.values(Permission);
