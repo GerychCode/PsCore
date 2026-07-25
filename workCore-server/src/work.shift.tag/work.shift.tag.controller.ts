@@ -27,6 +27,13 @@ export class WorkShiftTagController {
     return this.tagService.getAllTags();
   }
 
+  // Довідник для конструктора правил (поля/оператори/дії)
+  @Get('rule-catalog')
+  @RequirePermissions(Permission.MANAGE_TAGS)
+  getRuleCatalog() {
+    return this.tagService.getRuleCatalog();
+  }
+
   @Get(':id')
   @Authorization()
   getTagById(@Param('id', ParseIntPipe) id: number) {

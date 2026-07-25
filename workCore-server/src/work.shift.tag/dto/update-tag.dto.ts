@@ -1,4 +1,14 @@
-import { IsString, IsInt, IsOptional, Min } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsOptional,
+  Min,
+  IsHexColor,
+  IsBoolean,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { TagRuleDto } from './tag-rule.dto';
 
 export class UpdateTagDto {
   @IsOptional()
@@ -13,4 +23,17 @@ export class UpdateTagDto {
   @IsOptional()
   @IsString({ message: 'Опис має бути рядком' })
   description?: string;
+
+  @IsOptional()
+  @IsHexColor({ message: 'Колір має бути HEX (наприклад #F59E0B).' })
+  color?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  autoApply?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TagRuleDto)
+  rule?: TagRuleDto;
 }
