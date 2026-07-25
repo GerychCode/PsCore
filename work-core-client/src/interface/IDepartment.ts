@@ -12,6 +12,19 @@ export interface IDepartment {
     staffingByWeekday?: Record<string, number>
 }
 
+/** Стан прив'язки Telegram-акаунта відділення. Сам chat id клієнту не віддаємо. */
+export interface ITelegramLinkStatus {
+    id: number
+    name: string
+    linked: boolean
+}
+
+/** Одноразовий код, який надсилають боту з акаунта відділення. */
+export interface ITelegramLinkCode {
+    code: string
+    expiresInSec: number
+}
+
 export interface IDepartmentMember {
     id: number
     firstName: string

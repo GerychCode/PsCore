@@ -17,10 +17,57 @@ import { RequirePermissions } from '../common/permissions/permissions.decorator'
 import { Permission } from '../common/permissions/permission.enum';
 import { UpdateDepartmentDto } from './dto/update.department.dto';
 import { SetMembersDto } from './dto/staffing.dto';
+import { DepartmentLinkService } from '../telegram/department-link.service';
 
 @Controller('department')
 export class DepartmentController {
-  constructor(private readonly departmentService: DepartmentService) {}
+  constructor(
+    private readonly departmentService: DepartmentService,
+    private readonly departmentLinkService: DepartmentLinkService,
+  ) {}
+
+  // ---------- Telegram-акаунт відділення (куди йдуть коди підтвердження) ----------
+
+  @Get(':departmentId/telegram')
+  @RequirePermissions(Permission.MANAGE_DEPARTMENTS)
+  async getTelegramStatus(
+    @Param('departmentId', ParseIntPipe) departmentId: number,
+  ) {
+    const status = await this.departmentLinkService.status(departmentId);
+    if (!status) {
+      throw new HttpException('Відділення не знайдено', HttpStatus.NOT_FOUND);
+    }
+    return status;
+  }
+
+  /**
+   * Видає одноразовий код, який треба надіслати боту З АКАУНТА ВІДДІЛЕННЯ.
+   * Сам chat id адмін не вводить: код доводить доступ до чату й унеможливлює
+   * помилку, за якої коди присутності летіли б стороннім.
+   */
+  @Post(':departmentId/telegram/code')
+  @RequirePermissions(Permission.MANAGE_DEPARTMENTS)
+  async createTelegramCode(
+    @Param('departmentId', ParseIntPipe) departmentId: number,
+  ) {
+    const status = await this.departmentLinkService.status(departmentId);
+    if (!status) {
+      throw new HttpException('Відділення не знайдено', HttpStatus.NOT_FOUND);
+    }
+    return this.departmentLinkService.createCode(departmentId);
+  }
+
+  @Delete(':departmentId/telegram')
+  @RequirePermissions(Permission.MANAGE_DEPARTMENTS)
+  async unlinkTelegram(
+    @Param('departmentId', ParseIntPipe) departmentId: number,
+  ) {
+    const status = await this.departmentLinkService.status(departmentId);
+    if (!status) {
+      throw new HttpException('Відділення не знайдено', HttpStatus.NOT_FOUND);
+    }
+    return this.departmentLinkService.unlink(departmentId);
+  }
 
   @Get()
   @Authorization()

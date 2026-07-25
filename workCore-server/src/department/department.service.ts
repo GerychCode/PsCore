@@ -7,6 +7,7 @@ import { CreateDepartmentDto } from './dto/create.department.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Department } from '../../generated/prisma';
 import { UpdateDepartmentDto } from './dto/update.department.dto';
+import { pickChangedFields } from '../common/utils/pick-changed-fields';
 
 @Injectable()
 export class DepartmentService {
@@ -114,14 +115,9 @@ export class DepartmentService {
     this.validateTimeRange(weekdaysOpeningTime, weekdaysClosingTime);
     this.validateTimeRange(weekendsOpeningTime, weekendsClosingTime);
 
-    const changedData = Object.entries(updateDepartmentDto).reduce(
-        (acc, [key, value]) => {
-          if (departmentData[key] !== value) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Partial<UpdateDepartmentDto>,
+    const changedData = pickChangedFields(
+        departmentData as any,
+        updateDepartmentDto,
     );
 
     if (Object.keys(changedData).length === 0) {

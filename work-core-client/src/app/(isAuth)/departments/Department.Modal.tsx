@@ -13,6 +13,7 @@ import { departmentService } from '@/service/department.service'
 import { FaTrash } from 'react-icons/fa'
 import { toast } from 'sonner'
 import Avatar from '@/app/components/user/Avatar'
+import DepartmentTelegramLink from './Department.TelegramLink'
 
 interface DepartmentModalProps {
     isOpen: boolean
@@ -272,6 +273,13 @@ const DepartmentModal: React.FC<DepartmentModalProps> = ({
                                 ))}
                             </div>
                         </div>
+                    )}
+
+                    {isEditMode && department && (
+                        <DepartmentTelegramLink
+                            departmentId={department.id}
+                            departmentName={department.name}
+                        />
                     )}
 
                     {isEditMode && (
