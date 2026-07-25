@@ -9,10 +9,17 @@ type Status = 'loading' | 'success' | 'error'
 
 const VerifyInner = () => {
   const params = useSearchParams()
-  const token = params.get('token') ?? ''
+  // Токен захоплюємо один раз і прибираємо з URL (історія/Referer)
+  const [token] = useState(() => params.get('token') ?? '')
   const [status, setStatus] = useState<Status>('loading')
   const [message, setMessage] = useState('')
   const done = useRef(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   useEffect(() => {
     if (done.current) return

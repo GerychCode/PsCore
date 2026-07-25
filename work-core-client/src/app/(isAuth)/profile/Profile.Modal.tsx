@@ -27,7 +27,6 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
       dateOfBirth: user?.dateOfBirth || '',
       phone: user?.phone || '',
       address: user?.address || '',
-      avatar: user?.avatar || null,
     }),
     [user]
   )

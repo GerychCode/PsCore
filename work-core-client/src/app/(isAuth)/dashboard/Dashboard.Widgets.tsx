@@ -15,21 +15,22 @@ import {
   YAxis,
 } from 'recharts'
 
-// Темна палітра під референс (помаранчевий акцент)
+// Палітра з помаранчевим акцентом; кольори поверхонь — токени теми,
+// тож панель темна в темній темі та світла у світлій
 export const ACCENT = '#f97316'
 export const ACCENT_SOFT = '#fb923c'
 
 const tooltipStyle = {
   borderRadius: '10px',
-  border: '1px solid rgba(255,255,255,0.08)',
-  background: '#1c1e24',
-  color: '#e7e9ee',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
+  color: 'var(--foreground)',
   fontSize: '12px',
-  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+  boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
 }
 
 export const panel =
-  'rounded-2xl border border-white/[0.06] bg-[#181a20] p-5'
+  'rounded-2xl border border-[var(--border)] bg-surface p-5'
 
 /** KPI-картка зі спарклайном і дельтою */
 export function StatCard({
@@ -51,13 +52,13 @@ export function StatCard({
   return (
     <div className={panel + ' flex flex-col justify-between min-h-[130px]'}>
       <div className='flex items-start justify-between gap-2'>
-        <span className='text-[13px] text-white/50 font-medium'>{label}</span>
+        <span className='text-[13px] text-muted font-medium'>{label}</span>
         {delta && (
           <span
             className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${
               delta.positive
-                ? 'text-emerald-400 bg-emerald-400/10'
-                : 'text-orange-400 bg-orange-400/10'
+                ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+                : 'text-orange-600 dark:text-orange-400 bg-orange-500/10'
             }`}
           >
             {delta.positive ? '↑' : '↓'} {delta.value}
@@ -66,10 +67,10 @@ export function StatCard({
       </div>
       <div className='flex items-end justify-between gap-2 mt-1'>
         <div>
-          <div className='text-[26px] leading-tight font-bold text-white'>
+          <div className='text-[26px] leading-tight font-bold text-foreground'>
             {value}
           </div>
-          {sub && <div className='text-[11px] text-white/35 mt-1'>{sub}</div>}
+          {sub && <div className='text-[11px] text-muted/80 mt-1'>{sub}</div>}
         </div>
         <div className='w-[90px] h-[38px] shrink-0'>
           <ResponsiveContainer width='100%' height='100%'>
@@ -110,7 +111,7 @@ export function AreaTrendCard({
   return (
     <div className={panel + ' flex flex-col'}>
       <div className='flex items-center justify-between mb-4'>
-        <h3 className='text-white font-semibold'>{title}</h3>
+        <h3 className='text-foreground font-semibold'>{title}</h3>
         {extra}
       </div>
       <div className='h-[240px] w-full'>
@@ -124,7 +125,7 @@ export function AreaTrendCard({
             </defs>
             <XAxis
               dataKey='label'
-              stroke='#6b7079'
+              stroke='var(--muted)'
               fontSize={11}
               tickLine={false}
               axisLine={false}
@@ -132,7 +133,7 @@ export function AreaTrendCard({
               minTickGap={24}
             />
             <YAxis
-              stroke='#6b7079'
+              stroke='var(--muted)'
               fontSize={11}
               tickLine={false}
               axisLine={false}
@@ -140,7 +141,7 @@ export function AreaTrendCard({
             />
             <Tooltip
               contentStyle={tooltipStyle}
-              cursor={{ stroke: 'rgba(255,255,255,0.12)' }}
+              cursor={{ stroke: 'var(--border)' }}
             />
             <Area
               type='monotone'
@@ -150,7 +151,7 @@ export function AreaTrendCard({
               strokeWidth={2.5}
               fill='url(#areaHours)'
               dot={false}
-              activeDot={{ r: 4, fill: ACCENT, stroke: '#181a20', strokeWidth: 2 }}
+              activeDot={{ r: 4, fill: ACCENT, stroke: 'var(--surface)', strokeWidth: 2 }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -174,7 +175,7 @@ export function DonutCard({
   const hasData = data.some((d) => d.value > 0)
   return (
     <div className={panel + ' flex flex-col'}>
-      <h3 className='text-white font-semibold mb-4'>{title}</h3>
+      <h3 className='text-foreground font-semibold mb-4'>{title}</h3>
       <div className='flex items-center gap-4 flex-1'>
         <div className='relative w-[150px] h-[150px] shrink-0'>
           {hasData ? (
@@ -198,11 +199,11 @@ export function DonutCard({
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <div className='w-full h-full rounded-full border-[16px] border-white/[0.04]' />
+            <div className='w-full h-full rounded-full border-[16px] border-[var(--surface-3)]' />
           )}
           <div className='absolute inset-0 flex flex-col items-center justify-center pointer-events-none'>
-            <span className='text-2xl font-bold text-white'>{total}</span>
-            <span className='text-[10px] text-white/40 uppercase tracking-wide'>
+            <span className='text-2xl font-bold text-foreground'>{total}</span>
+            <span className='text-[10px] text-muted uppercase tracking-wide'>
               {totalLabel}
             </span>
           </div>
@@ -214,8 +215,8 @@ export function DonutCard({
                 className='h-2.5 w-2.5 rounded-full shrink-0'
                 style={{ backgroundColor: d.color }}
               />
-              <span className='text-[13px] text-white/70 flex-1'>{d.name}</span>
-              <span className='text-[13px] font-semibold text-white'>
+              <span className='text-[13px] text-foreground/75 flex-1'>{d.name}</span>
+              <span className='text-[13px] font-semibold text-foreground'>
                 {d.value}
               </span>
             </div>
@@ -236,20 +237,20 @@ export function MiniBarCard({
 }) {
   return (
     <div className={panel + ' flex flex-col'}>
-      <h3 className='text-white font-semibold mb-4'>{title}</h3>
+      <h3 className='text-foreground font-semibold mb-4'>{title}</h3>
       <div className='h-[180px] w-full'>
         {data.length > 0 ? (
           <ResponsiveContainer width='100%' height='100%'>
             <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
               <XAxis
                 dataKey='name'
-                stroke='#6b7079'
+                stroke='var(--muted)'
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
               />
               <YAxis
-                stroke='#6b7079'
+                stroke='var(--muted)'
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
@@ -257,13 +258,13 @@ export function MiniBarCard({
               />
               <Tooltip
                 contentStyle={tooltipStyle}
-                cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                cursor={{ fill: 'var(--surface-2)' }}
               />
               <Bar dataKey='value' radius={[4, 4, 0, 0]} fill={ACCENT} barSize={22} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <div className='h-full flex items-center justify-center text-white/30 text-sm'>
+          <div className='h-full flex items-center justify-center text-muted text-sm'>
             Немає даних
           </div>
         )}
