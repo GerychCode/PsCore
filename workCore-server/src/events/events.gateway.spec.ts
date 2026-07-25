@@ -134,4 +134,30 @@ describe('EventsGateway', () => {
       expect(emit).toHaveBeenCalledWith('event', 'p');
     });
   });
+
+  it('невалідний JSON сесії → catch → відхилення', async () => {
+    redis.get.mockResolvedValue('{невалідний json');
+    const c = authedClient('bad');
+    await gateway.handleConnection(c);
+    expect(c.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('без cookie → відхилення', async () => {
+    const c = client('no-cookie', undefined);
+    await gateway.handleConnection(c);
+    expect(c.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('cookie без session= → відхилення', async () => {
+    const c = client('other', 'foo=bar');
+    await gateway.handleConnection(c);
+    expect(c.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('userId не число у сесії → відхилення', async () => {
+    redis.get.mockResolvedValue(JSON.stringify({ userId: 'not-a-number' }));
+    const c = authedClient('x');
+    await gateway.handleConnection(c);
+    expect(c.disconnect).toHaveBeenCalledWith(true);
+  });
 });

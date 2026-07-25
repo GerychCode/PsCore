@@ -5,13 +5,19 @@ import {
   WebSocketGateway,
 } from '@nestjs/websockets';
 import { Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
+import { Redis } from 'ioredis';
 import { ChatService } from './chat.service';
+import { parseCorsOrigins } from '../common/utils/cors-origins';
 
 interface SendMessagePayload {
   receiverId: number;
   content: string;
 }
+
+// Ліміт частоти надсилання: не більше 20 повідомлень за 10 секунд на користувача
+const CHAT_RATE_LIMIT = 20;
+const CHAT_RATE_WINDOW_SEC = 10;
 
 /**
  * Особисті повідомлення через сокети.
@@ -20,14 +26,27 @@ interface SendMessagePayload {
  */
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: parseCorsOrigins(process.env.CORS_ORIGIN),
     credentials: true,
   },
 })
 export class ChatGateway {
   private readonly logger = new Logger('ChatGateway');
 
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
+  ) {}
+
+  /** Тротлінг WS-подій (глобальний HTTP-throttler на сокети не діє). */
+  private async isRateLimited(userId: number): Promise<boolean> {
+    const key = `ws-chat-rl:${userId}`;
+    const count = await this.redisClient.incr(key);
+    if (count === 1) {
+      await this.redisClient.expire(key, CHAT_RATE_WINDOW_SEC);
+    }
+    return count > CHAT_RATE_LIMIT;
+  }
 
   @SubscribeMessage('chat:send')
   async onSendMessage(
@@ -37,6 +56,10 @@ export class ChatGateway {
     const senderId = client.data?.userId as number | undefined;
     if (!senderId) {
       return { error: 'Користувача не авторизовано' };
+    }
+
+    if (await this.isRateLimited(senderId)) {
+      return { error: 'Забагато повідомлень. Трохи зачекайте.' };
     }
 
     try {
