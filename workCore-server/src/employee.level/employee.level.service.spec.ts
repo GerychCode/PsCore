@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { EmployeeLevelService } from './employee.level.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SYSTEM_TAGS } from '../work.shift.tag/system-tags';
 
 describe('EmployeeLevelService', () => {
   let service: EmployeeLevelService;
@@ -46,13 +47,53 @@ describe('EmployeeLevelService', () => {
       expect(res).toEqual({ score: 14, penalty: 4, clean: false });
     });
 
-    it('зміна в очікуванні дає повний досвід, але без бонусу чистоти', () => {
+    // Раніше "чистою" вважалась лише APPROVED-зміна, тож поки адмін не апрувив,
+    // надійність у всіх дорівнювала нулю і скоринг генератора її не бачив.
+    it('зміна в очікуванні теж може бути чистою', () => {
       const res = service.evaluateShift({
         status: 'PENDING',
         totalHours: 0,
         tags: [],
       });
-      expect(res).toEqual({ score: 10, penalty: 0, clean: false });
+      expect(res).toEqual({ score: 12, penalty: 0, clean: true });
+    });
+
+    it('понаднормові не гіршають оцінку, а покращують', () => {
+      const plain = service.evaluateShift({
+        status: 'APPROVED',
+        totalHours: 8,
+        tags: [],
+      });
+      const overtime = service.evaluateShift({
+        status: 'APPROVED',
+        totalHours: 10,
+        tags: [{ name: SYSTEM_TAGS.OVERTIME.name, severity: 1 }],
+      });
+
+      expect(overtime.score).toBeGreaterThan(plain.score);
+      expect(overtime.penalty).toBe(0);
+      expect(overtime.clean).toBe(true);
+    });
+
+    it('обставини поза виною працівника не штрафуються', () => {
+      const res = service.evaluateShift({
+        status: 'APPROVED',
+        totalHours: 8,
+        tags: [
+          { name: SYSTEM_TAGS.OFF_SCHEDULE.name, severity: 2 },
+          { name: SYSTEM_TAGS.DAY_OFF.name, severity: 2 },
+        ],
+      });
+      expect(res).toEqual({ score: 20, penalty: 0, clean: true });
+    });
+
+    it('запізнення лишається штрафом і псує чистоту', () => {
+      const res = service.evaluateShift({
+        status: 'APPROVED',
+        totalHours: 8,
+        tags: [{ name: SYSTEM_TAGS.LATE.name, severity: 2 }],
+      });
+      expect(res).toEqual({ score: 14, penalty: 4, clean: false });
     });
 
     it('відхилена зміна не дає ні досвіду, ні штрафу', () => {
@@ -89,19 +130,20 @@ describe('EmployeeLevelService', () => {
 
       const res = await service.getEmployeeLevel(1);
 
-      // 20 (чиста) + 14 (з тегом) + 18 (pending) + 0 (rejected) = 52 XP
+      // 20 (чиста) + 14 (зі штрафним тегом) + 20 (pending, теж чиста)
+      // + 0 (rejected) = 54 XP; чистих 2 з 4 → 50%
       expect(res).toEqual({
         userId: 1,
         level: 1,
         baseLevel: 1,
-        xp: 52,
-        reliability: 25,
+        xp: 54,
+        reliability: 50,
         totalShifts: 4,
         stats: {
           approved: 2,
           pending: 1,
           rejected: 1,
-          cleanShifts: 1,
+          cleanShifts: 2,
           penaltyPoints: 4,
         },
       });
