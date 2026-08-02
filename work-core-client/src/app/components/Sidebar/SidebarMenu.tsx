@@ -52,7 +52,7 @@ export function SidebarMenu({ collapsed }: SidebarMenuProps) {
                                 ${
                                     isActive
                                         ? 'bg-primary/20 hover:bg-primary/10 text-primary font-semibold'
-                                        : 'text-secondary hover:bg-[#f5f5f5]'
+                                        : 'text-secondary hover:bg-surface-2'
                                 }
                             `}
                             >

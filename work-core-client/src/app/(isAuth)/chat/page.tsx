@@ -309,13 +309,13 @@ export default function ChatPage() {
                         className={`max-w-[75%] px-4 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words ${
                           isMine
                             ? 'bg-primary text-white rounded-br-sm'
-                            : 'bg-slate-100 text-black rounded-bl-sm'
+                            : 'bg-surface-2 text-foreground rounded-bl-sm dark:bg-surface-3'
                         }`}
                       >
                         <p>{message.content}</p>
                         <p
                           className={`text-[10px] mt-1 text-right ${
-                            isMine ? 'text-white/70' : 'text-secondary'
+                            isMine ? 'text-white/70' : 'text-muted'
                           }`}
                         >
                           {formatTime(message.createdAt)}
@@ -342,7 +342,7 @@ export default function ChatPage() {
                 }}
                 placeholder='Напишіть повідомлення...'
                 maxLength={2000}
-                className='flex-grow px-4 py-2 rounded-xl border border-secondary/20 focus:outline-none focus:border-primary text-sm'
+                className='flex-grow px-4 py-2 rounded-xl border border-secondary/20 bg-transparent text-foreground placeholder:text-muted focus:outline-none focus:border-primary text-sm'
               />
               <button
                 onClick={sendMessage}

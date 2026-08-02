@@ -13,8 +13,21 @@ import { userUpdate, userUpdateAvatar } from '@/hooks/user/user.update.mutation'
 import { useGetUserMutation } from '@/hooks/user/get.user.mutation'
 import { toast } from 'sonner'
 
-const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
-  const user = userStore((state) => state.user)
+/**
+ * @param targetUser чужий профіль, який редагує керівник. Без нього
+ * модалка працює зі своїм профілем, як і раніше.
+ * @param onUpdated викликається після успішного збереження — сторінка
+ * чужого профілю має перечитати дані сама (userStore тут не оновиться).
+ */
+const ProfileModal = ({
+  isModalOpen,
+  setIsModalOpen,
+  targetUser,
+  onUpdated,
+}: any) => {
+  const ownUser = userStore((state) => state.user)
+  const isForeign = !!targetUser && targetUser.id !== ownUser?.id
+  const user = targetUser ?? ownUser
   const [avatarFile, setAvatarFile] = useState<File>()
   const [changedFields, setChangedFields] = useState<Partial<IUserUpdate>>({})
   const [isProfileFieldsUpdated, setIsProfileFieldsUpdated] = useState(false)
@@ -27,7 +40,6 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
       dateOfBirth: user?.dateOfBirth || '',
       phone: user?.phone || '',
       address: user?.address || '',
-      avatar: user?.avatar || null,
     }),
     [user]
   )
@@ -43,8 +55,10 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
     defaultValues: initialValues,
   })
 
-  const { mutateAsync, isPending: isProfileUpdating } =
-    userUpdate(changedFields)
+  const { mutateAsync, isPending: isProfileUpdating } = userUpdate(
+    changedFields,
+    isForeign ? targetUser.id : undefined
+  )
   const { mutateAsync: updateAvatarMutation, isPending: isAvatarUpdating } =
     userUpdateAvatar()
   const { mutate: getUser } = useGetUserMutation()
@@ -60,7 +74,8 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
       let avatarUpdated = false
       let profileUpdated = false
 
-      if (avatarFile) {
+      // PUT /user/avatar завантажує аватар ЛИШЕ собі — чужий міняти нічим
+      if (avatarFile && !isForeign) {
         const formData = new FormData()
         formData.append('avatar', avatarFile)
         await updateAvatarMutation(formData)
@@ -74,6 +89,7 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
 
       if (avatarUpdated || profileUpdated) {
         toast.success('Профіль успішно оновлено!')
+        onUpdated?.()
       }
 
       setIsProfileFieldsUpdated(false)
@@ -88,7 +104,8 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
         console.error('Profile update failed:', error)
       }
     } finally {
-      getUser()
+      // Свій профіль перечитуємо в стор; чужий оновлює сторінка через onUpdated
+      if (!isForeign) getUser()
     }
   }
 
@@ -172,7 +189,10 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
             </div>
           </div>
 
-          <div className='flex flex-col gap-3'>
+          {/* Аватар чужого профілю змінити нічим: PUT /user/avatar працює
+              лише зі своїм. Показувати непрацюючу кнопку — гірше, ніж не
+              показувати блок узагалі. */}
+          <div className={`flex flex-col gap-3 ${isForeign ? 'hidden' : ''}`}>
             <div className='flex flex-row gap-1.5 items-center'>
               <FaImage className='text-2xl text-primary' />
               <h2 className='text-md font-medium text-black'>
@@ -239,13 +259,17 @@ const ProfileModal = ({ isModalOpen, setIsModalOpen }: any) => {
                 placeholder='Прізвище'
               />
             </div>
+            {/* Пошта — це логін. Змінити її співробітнику означає відібрати
+                йому доступ, поки він про це не дізнається, тож керівнику
+                поле лише для читання: хай міняє власник. */}
             <InputComponent
               {...register('email')}
               errors={errors.email?.message}
               type='text'
-              label='Пошта'
+              label={isForeign ? 'Пошта (лише власник змінює)' : 'Пошта'}
               defaultValue={watch('email')}
               placeholder='Пошта'
+              disabled={isForeign}
             />
             <InputComponent
               {...register('phone')}

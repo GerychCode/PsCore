@@ -5,8 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  startOfWeek,
-  endOfWeek,
   eachDayOfInterval,
   formatISO,
   startOfDay,
@@ -15,6 +13,7 @@ import {
   parseISO,
   getISODay,
 } from 'date-fns';
+import { mondayWeekStart, weekBounds } from '../common/utils/week.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { DepartmentService } from '../department/department.service';
 import { UserService } from '../user/user.service';
@@ -22,14 +21,19 @@ import { CreateWorkScheduleDto } from './dto/create-work-schedule.dto';
 import { UpdateWorkScheduleDto } from './dto/update-work-schedule.dto';
 import { FilterWorkScheduleDto } from './dto/filter-work-schedule.dto';
 import { LockWeekDto } from './dto/lock-week.dto';
-import { User } from '../../generated/prisma';
+import { Prisma, User } from '../../generated/prisma';
 import { EventsGateway } from '../events/events.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { hasPermission } from '../common/permissions/permissions.util';
 import { Permission } from '../common/permissions/permission.enum';
 
 /** Чи може користувач керувати чужими графіками / генерувати / обходити лок. */
 const canManageSchedule = (user: User) =>
   hasPermission(user as any, Permission.MANAGE_SCHEDULE);
+
+/** Порушення unique (userId, date) — гонка «два розклади на день». */
+const isDuplicateDay = (e: unknown): boolean =>
+  e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
 
 @Injectable()
 export class WorkScheduleService {
@@ -38,12 +42,24 @@ export class WorkScheduleService {
     private departmentService: DepartmentService,
     private userService: UserService,
     private eventsGateway: EventsGateway,
+    private notificationsService: NotificationsService,
   ) {}
 
-  async getWorkSchedules(filterDto: FilterWorkScheduleDto) {
+  /**
+   * Без MANAGE_SCHEDULE користувач бачить лише власні опубліковані рядки:
+   * чужий графік і чернетки до публікації — не його справа. Раніше цей
+   * ендпоінт віддавав усе всім, обходячи приховування чернеток у week-view.
+   */
+  async getWorkSchedules(user: User, filterDto: FilterWorkScheduleDto) {
+    const restricted = !canManageSchedule(user);
+
     return this.prismaService.workSchedule.findMany({
       where: {
-        ...(filterDto.userId && { userId: filterDto.userId }),
+        ...(restricted
+          ? { userId: user.id, isDraft: false }
+          : {
+              ...(filterDto.userId && { userId: filterDto.userId }),
+            }),
         ...(filterDto.departmentId && { departmentId: filterDto.departmentId }),
         ...(filterDto.dateFrom || filterDto.dateTo
           ? {
@@ -96,6 +112,11 @@ export class WorkScheduleService {
     await this.userService.findById(createDto.userId);
     await this.departmentService.getDepartmentById(createDto.departmentId);
 
+    // Без прав можна вписатись лише у власне відділення. Інакше людина
+    // з'являлась у чужому графіку і, через busyUserIds, блокувала себе
+    // для власного відділення; заразом це обходило замок чужого тижня.
+    await this.assertMembership(user, createDto.userId, createDto.departmentId);
+
     const startedAt = parse(createDto.startedAt, 'HH:mm', scheduleDate);
     const endAt = parse(createDto.endTime, 'HH:mm', scheduleDate);
 
@@ -121,12 +142,24 @@ export class WorkScheduleService {
       );
     }
 
-    const newSchedule = await this.prismaService.workSchedule.create({
-      data: {
-        ...createDto,
-        date: scheduleDate.toISOString(),
-      },
-    });
+    let newSchedule;
+    try {
+      newSchedule = await this.prismaService.workSchedule.create({
+        data: {
+          ...createDto,
+          // Нормалізуємо до початку дня — узгоджено з unique(userId, date)
+          date: startOfDay(scheduleDate),
+        },
+      });
+    } catch (e) {
+      // Гонка: між перевіркою existingSchedule і create вставили дубль
+      if (isDuplicateDay(e)) {
+        throw new BadRequestException(
+          'У цього користувача вже є розклад на цей день!',
+        );
+      }
+      throw e;
+    }
 
     this.eventsGateway.server.emit('invalidate_schedules');
 
@@ -144,10 +177,47 @@ export class WorkScheduleService {
       throw new ForbiddenException('Ви можете редагувати тільки свій графік.');
     }
 
+    // Власник рядка міг перепризначити його будь-кому, просто підмінивши
+    // userId у тілі запиту — це обходило весь механізм обміну змінами
+    // (ShiftSwap) з його підтвердженням менеджера.
+    if (!canManageSchedule(user)) {
+      if (
+        updateDto.userId !== undefined &&
+        updateDto.userId !== existingSchedule.userId
+      ) {
+        throw new ForbiddenException(
+          'Передати зміну іншому працівнику можна лише через обмін.',
+        );
+      }
+      if (
+        updateDto.departmentId !== undefined &&
+        updateDto.departmentId !== existingSchedule.departmentId
+      ) {
+        throw new ForbiddenException(
+          'Змінювати відділення зміни може лише менеджер.',
+        );
+      }
+    }
+
     const scheduleDate = updateDto.date
       ? parseISO(updateDto.date)
       : existingSchedule.date;
-    await this.checkWeekLock(existingSchedule.departmentId, scheduleDate, user);
+
+    // Замок перевіряємо і для тижня-джерела, і для тижня-призначення.
+    // Раніше перевірявся лише другий, тож рядок можна було "винести"
+    // із залоченого тижня, просто змінивши дату на вільний.
+    await this.checkWeekLock(
+      existingSchedule.departmentId,
+      existingSchedule.date,
+      user,
+    );
+    if (updateDto.date) {
+      await this.checkWeekLock(
+        existingSchedule.departmentId,
+        scheduleDate,
+        user,
+      );
+    }
 
     if (updateDto.departmentId) {
       await this.departmentService.getDepartmentById(updateDto.departmentId);
@@ -186,13 +256,23 @@ export class WorkScheduleService {
       );
     }
 
-    const updatedSchedule = await this.prismaService.workSchedule.update({
-      where: { id },
-      data: {
-        ...updateDto,
-        ...(updateDto.date && { date: scheduleDate.toISOString() }),
-      },
-    });
+    let updatedSchedule;
+    try {
+      updatedSchedule = await this.prismaService.workSchedule.update({
+        where: { id },
+        data: {
+          ...updateDto,
+          ...(updateDto.date && { date: startOfDay(scheduleDate) }),
+        },
+      });
+    } catch (e) {
+      if (isDuplicateDay(e)) {
+        throw new BadRequestException(
+          'У цього користувача вже є розклад на цей день!',
+        );
+      }
+      throw e;
+    }
 
     this.eventsGateway.server.emit('invalidate_schedules');
 
@@ -212,19 +292,65 @@ export class WorkScheduleService {
       user,
     );
 
+    // ShiftSwap.scheduleId має onDelete: Cascade, тож активні пропозиції
+    // зникнуть разом із рядком. Попереджаємо учасників ДО видалення —
+    // інакше той, хто вже погодився взяти зміну, лишався б певен, що вона за ним.
+    await this.notifyAffectedSwaps(existingSchedule.id, user.id);
+
     const deletedSchedule = await this.prismaService.workSchedule.delete({
       where: { id },
     });
 
     this.eventsGateway.server.emit('invalidate_schedules');
+    this.eventsGateway.server.emit('invalidate_swaps');
 
     return deletedSchedule;
   }
 
+  /** Сповіщає учасників активних обмінів, що зміну (а з нею й пропозицію) видалено. */
+  private async notifyAffectedSwaps(scheduleId: number, actorId: number) {
+    const swaps = await this.prismaService.shiftSwap.findMany({
+      where: { scheduleId, status: { in: ['OPEN', 'CLAIMED'] } },
+      select: { requesterId: true, claimerId: true },
+    });
+
+    const recipients = new Set<number>();
+    for (const swap of swaps) {
+      recipients.add(swap.requesterId);
+      if (swap.claimerId) recipients.add(swap.claimerId);
+    }
+    recipients.delete(actorId);
+
+    for (const userId of recipients) {
+      await this.notificationsService.createNotification(userId, {
+        title: 'Обмін скасовано',
+        message:
+          'Планову зміну видалено з графіка, тому пропозицію обміну закрито.',
+        category: 'schedule',
+      });
+    }
+  }
+
+  /** Без MANAGE_SCHEDULE вписувати можна лише у відділення, де ти є в складі. */
+  private async assertMembership(
+    user: User,
+    targetUserId: number,
+    departmentId: number,
+  ) {
+    if (canManageSchedule(user)) return;
+
+    const isMember = await this.prismaService.user.count({
+      where: { id: targetUserId, departments: { some: { id: departmentId } } },
+    });
+
+    if (!isMember) {
+      throw new ForbiddenException('Ви не входите у це відділення.');
+    }
+  }
+
   async getWeekView(date: string, isAdmin = false) {
     const targetDate = new Date(date);
-    const weekStart = startOfWeek(targetDate, { weekStartsOn: 1 });
-    const weekEnd = endOfWeek(targetDate, { weekStartsOn: 1 });
+    const { weekStart, weekEnd } = weekBounds(targetDate);
 
     const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
@@ -341,7 +467,7 @@ export class WorkScheduleService {
   }
 
   async toggleWeekLock(dto: LockWeekDto) {
-    const weekStart = startOfWeek(new Date(dto.date), { weekStartsOn: 1 });
+    const weekStart = mondayWeekStart(new Date(dto.date));
 
     const result = await this.prismaService.workScheduleLock.upsert({
       where: {
@@ -368,7 +494,7 @@ export class WorkScheduleService {
   private async checkWeekLock(departmentId: number, date: Date, user: User) {
     if (canManageSchedule(user)) return;
 
-    const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+    const weekStart = mondayWeekStart(date);
 
     const lock = await this.prismaService.workScheduleLock.findUnique({
       where: {

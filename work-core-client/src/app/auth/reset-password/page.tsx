@@ -1,5 +1,5 @@
 'use client'
-import React, { Suspense, useState } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import InputComponent from '@/app/components/forms/InputComponent'
 import { SubmitHandler, useForm } from 'react-hook-form'
 import Link from 'next/link'
@@ -13,8 +13,15 @@ type Inputs = { password: string; confirm: string }
 
 const ResetForm = () => {
   const params = useSearchParams()
-  const token = params.get('token') ?? ''
+  // Захоплюємо токен один раз і прибираємо його з URL (історія браузера/Referer)
+  const [token] = useState(() => params.get('token') ?? '')
   const router = useRouter()
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
   const {
     register,
     handleSubmit,

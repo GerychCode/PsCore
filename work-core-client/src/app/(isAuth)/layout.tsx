@@ -155,7 +155,7 @@ export default function Layout({
               </div>
 
               {isDropdownOpen && (
-                <div className='absolute top-10 right-0 w-[340px] bg-white shadow-2xl rounded-xl border border-gray-100 p-0 z-50 overflow-hidden flex flex-col'>
+                <div className='fixed inset-x-4 top-16 sm:absolute sm:inset-x-auto sm:top-10 sm:right-0 sm:w-[340px] bg-white shadow-2xl rounded-xl border border-gray-100 p-0 z-50 overflow-hidden flex flex-col'>
                   <div className='px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center'>
                     <span className='font-semibold text-gray-700 text-sm'>
                       Сповіщення

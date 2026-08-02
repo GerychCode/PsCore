@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
-import { randomBytes } from 'crypto';
+import { rotateSingleUseToken } from '../common/utils/redis-token.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
 import { RolesService } from '../roles/roles.service';
@@ -40,15 +40,8 @@ export class InvitationsService {
   }
 
   /** Один активний токен на користувача. */
-  private async issueToken(userId: number): Promise<string> {
-    const pointerKey = `${INVITE_PREFIX}user:${userId}`;
-    const previous = await this.redis.get(pointerKey);
-    if (previous) await this.redis.del(`${INVITE_PREFIX}${previous}`);
-
-    const token = randomBytes(32).toString('hex');
-    await this.redis.set(`${INVITE_PREFIX}${token}`, userId, 'EX', INVITE_TTL);
-    await this.redis.set(pointerKey, token, 'EX', INVITE_TTL);
-    return token;
+  private issueToken(userId: number): Promise<string> {
+    return rotateSingleUseToken(this.redis, INVITE_PREFIX, userId, INVITE_TTL);
   }
 
   async createInvitation(dto: CreateInvitationDto) {

@@ -4,6 +4,7 @@ import { DepartmentController } from './department.controller';
 describe('DepartmentController', () => {
   let controller: DepartmentController;
   let service: any;
+  let departmentLink: any;
 
   beforeEach(() => {
     service = {
@@ -13,7 +14,14 @@ describe('DepartmentController', () => {
       updateDepartment: jest.fn(),
       deleteDepartment: jest.fn(),
     };
-    controller = new DepartmentController(service);
+    departmentLink = {
+      status: jest.fn().mockResolvedValue({ id: 1, name: 'Почайна', linked: false }),
+      createCode: jest
+        .fn()
+        .mockResolvedValue({ code: 'DEP-AB2CD', expiresInSec: 300 }),
+      unlink: jest.fn().mockResolvedValue({ id: 1, linked: false }),
+    };
+    controller = new DepartmentController(service, departmentLink);
   });
 
   describe('getAllDepartment', () => {
@@ -100,6 +108,19 @@ describe('DepartmentController', () => {
       await expect(controller.deleteDepartment(5)).rejects.toThrow(
         HttpException,
       );
+    });
+  });
+
+  describe('склад відділу', () => {
+    it('getMembers делегує', async () => {
+      service.getMembers = jest.fn().mockResolvedValue([{ id: 2 }]);
+      await expect(controller.getMembers(1)).resolves.toEqual([{ id: 2 }]);
+    });
+
+    it('setMembers делегує', async () => {
+      service.setMembers = jest.fn().mockResolvedValue([{ id: 2 }]);
+      await controller.setMembers(1, { userIds: [2, 3] } as any);
+      expect(service.setMembers).toHaveBeenCalledWith(1, [2, 3]);
     });
   });
 });

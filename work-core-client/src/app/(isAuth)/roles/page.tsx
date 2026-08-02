@@ -15,6 +15,7 @@ const DEFAULT_COLOR = '#5865F2'
 
 export default function RolesPage() {
   const router = useRouter()
+  const user = userStore((s) => s.user)
   const hasPermission = userStore((s) => s.hasPermission)
   const isAdmin = userStore((s) => s.isAdmin)
   const myPermissions = userStore((s) => s.permissions)
@@ -40,13 +41,16 @@ export default function RolesPage() {
   }
 
   useEffect(() => {
+    // Чекаємо, поки layout підтягне користувача, інакше при прямому
+    // відкритті сторінки права ще порожні і адміна теж редіректить
+    if (!user) return
     if (!canManage) {
       router.replace(PathConfig.DASHBOARD)
       return
     }
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManage])
+  }, [user, canManage])
 
   const selected = useMemo(
     () => roles.find((r) => r.id === selectedId) ?? null,

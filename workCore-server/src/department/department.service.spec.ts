@@ -152,4 +152,75 @@ describe('DepartmentService', () => {
       });
     });
   });
+
+  describe('validateStaffing (через createDepartment)', () => {
+    beforeEach(() => prisma.department.findFirst.mockResolvedValue(null));
+
+    it('валідний штат — ок', async () => {
+      prisma.department.create.mockResolvedValue({ id: 1 });
+      await expect(
+        service.createDepartment({
+          ...validDto,
+          staffingByWeekday: { '1': 3, '7': 1 },
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('невірний день тижня → BadRequest', async () => {
+      await expect(
+        service.createDepartment({
+          ...validDto,
+          staffingByWeekday: { '9': 3 },
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('невірна кількість → BadRequest', async () => {
+      await expect(
+        service.createDepartment({
+          ...validDto,
+          staffingByWeekday: { '1': 999 },
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getMembers / setMembers', () => {
+    beforeEach(() => {
+      prisma.user = {
+        findMany: jest.fn().mockResolvedValue([{ id: 2, firstName: 'X' }]),
+        count: jest.fn(),
+      };
+    });
+
+    it('getMembers повертає склад відділу', async () => {
+      prisma.department.findUnique.mockResolvedValue({ id: 1 });
+      await expect(service.getMembers(1)).resolves.toEqual([
+        { id: 2, firstName: 'X' },
+      ]);
+    });
+
+    it('setMembers: неіснуючі id → BadRequest', async () => {
+      prisma.department.findUnique.mockResolvedValue({ id: 1 });
+      prisma.user.count.mockResolvedValue(1); // передали 2, знайшли 1
+      await expect(service.setMembers(1, [2, 999])).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('setMembers: оновлює склад', async () => {
+      prisma.department.findUnique.mockResolvedValue({ id: 1 });
+      prisma.user.count.mockResolvedValue(2);
+      prisma.department.update = jest.fn().mockResolvedValue({});
+      await service.setMembers(1, [2, 3]);
+      expect(prisma.department.update).toHaveBeenCalled();
+    });
+
+    it('setMembers: порожній список — без count-перевірки', async () => {
+      prisma.department.findUnique.mockResolvedValue({ id: 1 });
+      prisma.department.update = jest.fn().mockResolvedValue({});
+      await service.setMembers(1, []);
+      expect(prisma.department.update).toHaveBeenCalled();
+    });
+  });
 });

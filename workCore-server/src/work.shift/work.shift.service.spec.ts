@@ -11,6 +11,8 @@ import { UserService } from '../user/user.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventsGateway } from '../events/events.gateway';
 import { ShiftSessionService } from './shift.session.service';
+import { AuditService } from '../audit/audit.service';
+import { TagRuleEngine } from '../work.shift.tag/tag-rule.engine';
 
 describe('WorkShiftService', () => {
   let service: WorkShiftService;
@@ -34,8 +36,7 @@ describe('WorkShiftService', () => {
       },
       workSchedule: { findFirst: jest.fn().mockResolvedValue(null) },
       tag: {
-        findUnique: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 99 }),
+        upsert: jest.fn().mockResolvedValue({ id: 99 }),
       },
     };
     departmentService = {
@@ -54,6 +55,14 @@ describe('WorkShiftService', () => {
         { provide: UserService, useValue: userService },
         { provide: NotificationsService, useValue: notifications },
         { provide: EventsGateway, useValue: events },
+        {
+          provide: AuditService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: TagRuleEngine,
+          useValue: { apply: jest.fn().mockResolvedValue([]) },
+        },
       ],
     }).compile();
 
@@ -91,6 +100,20 @@ describe('WorkShiftService', () => {
       await expect(service.getWorkShiftById(1)).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('чужу зміну без прав → Forbidden', async () => {
+      prisma.workShift.findUnique.mockResolvedValue({ id: 1, userId: 999 });
+      const emp = { id: 2, role: 'Employe', appRoles: [] } as any;
+      await expect(service.getWorkShiftById(1, emp)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('власну зміну — повертає', async () => {
+      prisma.workShift.findUnique.mockResolvedValue({ id: 1, userId: 2 });
+      const emp = { id: 2, role: 'Employe', appRoles: [] } as any;
+      await expect(service.getWorkShiftById(1, emp)).resolves.toBeDefined();
     });
   });
 
@@ -175,11 +198,11 @@ describe('WorkShiftService', () => {
 
     it('додає тег "У вихідний", якщо в розкладі вихідний', async () => {
       prisma.workSchedule.findFirst.mockResolvedValue({ isDayOff: true });
-      prisma.tag.findUnique.mockResolvedValue({ id: 50 });
+      prisma.tag.upsert.mockResolvedValue({ id: 50 });
       await service.createWorkShift(admin, baseDto);
-      expect(prisma.tag.findUnique).toHaveBeenCalledWith({
-        where: { name: 'У вихідний' },
-      });
+      expect(prisma.tag.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { name: 'У вихідний' } }),
+      );
     });
 
     it('додає тег "Запізнення" при пізнішому початку', async () => {
@@ -187,11 +210,11 @@ describe('WorkShiftService', () => {
         isDayOff: false,
         startedAt: '08:00',
       });
-      prisma.tag.findUnique.mockResolvedValue({ id: 60 });
+      prisma.tag.upsert.mockResolvedValue({ id: 60 });
       await service.createWorkShift(admin, baseDto);
-      expect(prisma.tag.findUnique).toHaveBeenCalledWith({
-        where: { name: 'Запізнення' },
-      });
+      expect(prisma.tag.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { name: 'Запізнення' } }),
+      );
     });
 
     it('не додає тег запізнення, якщо вчасно', async () => {
@@ -200,7 +223,7 @@ describe('WorkShiftService', () => {
         startedAt: '10:00',
       });
       await service.createWorkShift(admin, baseDto);
-      expect(prisma.tag.findUnique).not.toHaveBeenCalled();
+      expect(prisma.tag.upsert).not.toHaveBeenCalled();
     });
   });
 

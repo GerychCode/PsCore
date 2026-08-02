@@ -38,6 +38,15 @@ model User {
   departments      Department[]  @relation("DepartmentMembers")
   scheduleWishes   ScheduleWish[]
   appRoles         AppRole[]     @relation("UserRoles")
+  swapRequests     ShiftSwap[]   @relation("SwapRequester")
+  swapClaims       ShiftSwap[]   @relation("SwapClaimer")
+  swapTargets      ShiftSwap[]   @relation("SwapTarget")
+  auditLogs        AuditLog[]    @relation("AuditActor")
+  absences         Absence[]     @relation("AbsenceOwner")
+  reviewedAbsences Absence[]     @relation("AbsenceReviewer")
+
+  /// Річна норма оплачуваної відпустки в днях (мінімум за КЗпП — 24)
+  vacationDaysPerYear Int? @default(24) @map("vacation_days_per_year")
 }
 
 model AppRole {
@@ -63,7 +72,8 @@ enum Role {
 model Department {
   id                  Int      @id @default(autoincrement())
   name                String
-  telegramId          Int?     @unique
+  // Telegram chat id акаунта відділення (для кодів верифікації змін)
+  telegramId          String?  @unique
   weekdaysOpeningTime String   @map("weekdays_opening_time")
   weekdaysClosingTime String   @map("weekdays_closing_time")
   weekendsOpeningTime String   @map("weekends_opening_time")
@@ -73,6 +83,16 @@ model Department {
   longitude           Float?
   isActive            Boolean? @default(true) @map("is_active")
   staffingByWeekday   Json?    @map("staffing_by_weekday")
+
+  // Обмеження навантаження для генератора графіка. null = взяти значення
+  // за замовчуванням з коду (див. DEFAULT_LOAD_LIMITS); 0 = обмеження вимкнено.
+  maxHoursPerWeek     Int?     @map("max_hours_per_week")
+  maxConsecutiveDays  Int?     @map("max_consecutive_days")
+  minRestHours        Int?     @map("min_rest_hours")
+
+  // Радіус (метри), у якому вважається, що зміну відкрито на місці.
+  // null або 0 = геоперевірка вимкнена. Потребує заповнених latitude/longitude.
+  geofenceRadiusM     Int?     @map("geofence_radius_m")
 
   shiftDepartments    WorkShift[]
   scheduleDepartments WorkSchedule[]
@@ -94,7 +114,9 @@ model WorkShift {
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
-  user       User       @relation(fields: [userId], references: [id])
+  // onDelete: Cascade — видалення користувача прибирає його зміни (право на
+  // стирання/GDPR). Без цього user.delete падав на FK-обмеженні (500).
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   department Department @relation(fields: [departmentId], references: [id])
 
   tags     Tag[]      @relation("ShiftTags")
@@ -107,6 +129,15 @@ model Tag {
   name        String @unique
   severity    Int    @default(1)
   description String?
+  // Системні теги створює сама система (запізнення, авто-завершення тощо);
+  // їх не можна видаляти/перейменовувати вручну. color — для UI-бейджа.
+  isSystem    Boolean @default(false) @map("is_system")
+  color       String?
+  // Кастомна автоматизація тега (задає адмін). autoApply=true → тег
+  // авто-навішується на зміну, якщо rule.conditions збігаються; rule.actions —
+  // безпечні декларативні «події» (сповіщення). Довільний код НЕ виконується.
+  autoApply   Boolean @default(false) @map("auto_apply")
+  rule        Json?
   shifts      WorkShift[] @relation("ShiftTags")
 
   @@map("tags")
@@ -127,13 +158,119 @@ model WorkSchedule {
   endTime      String   @map("end_time")
   isDayOff     Boolean? @default(false) @map("is_day_off")
   isDraft      Boolean  @default(false) @map("is_draft")
+
+  /// Знімок рядка до того, як генератор його «перехопив» (зайняв власний
+  /// вихідний або перевів людину з іншого відділення):
+  /// { departmentId, isDayOff, startedAt, endTime }.
+  /// Потрібен, щоб «Відхилити» повертало рядок власнику, а не видаляло його
+  /// разом зі звичайними чернетками. null = рядок створено генератором з нуля.
+  takeover     Json?    @map("takeover")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  user       User       @relation(fields: [userId], references: [id])
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   department Department @relation(fields: [departmentId], references: [id])
+  swaps      ShiftSwap[]
 
+  // Один плановий рядок на людину на день (дата нормалізується до startOfDay).
+  // Захищає від гонки «два розклади на день» на рівні БД.
+  @@unique([userId, date])
   @@map("work_schedule")
+}
+
+enum SwapStatus {
+  OPEN // виставлено, чекає охочого
+  CLAIMED // хтось погодився забрати, чекає підтвердження менеджера
+  APPROVED // передано новому працівнику
+  REJECTED // менеджер відхилив
+  CANCELLED // автор скасував
+}
+
+/// Обмін/передача планової зміни (WorkSchedule) між співробітниками.
+model ShiftSwap {
+  id           Int        @id @default(autoincrement())
+  scheduleId   Int        @map("schedule_id")
+  requesterId  Int        @map("requester_id")
+  // Направлена пропозиція конкретній людині (null = відкрито для відділення)
+  targetUserId Int?       @map("target_user_id")
+  // Хто погодився забрати зміну
+  claimerId    Int?       @map("claimer_id")
+  status       SwapStatus @default(OPEN)
+  reason       String?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  resolvedAt   DateTime?  @map("resolved_at")
+
+  schedule   WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  requester  User         @relation("SwapRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  target     User?        @relation("SwapTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  claimer    User?        @relation("SwapClaimer", fields: [claimerId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([scheduleId])
+  @@map("shift_swaps")
+}
+
+/// Журнал аудиту: хто, що і над чим зробив (ролі, зміни, користувачі, свопи).
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  // null = системна дія (напр. авто-завершення зміни за розкладом)
+  actorId   Int?     @map("actor_id")
+  action    String // напр. "SHIFT_APPROVED", "ROLE_DELETED"
+  entity    String // напр. "WorkShift", "AppRole"
+  entityId  Int?     @map("entity_id")
+  metadata  Json?
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+enum AbsenceType {
+  VACATION // оплачувана відпустка — списується з річного балансу
+  SICK // лікарняний
+  UNPAID // відгул за свій рахунок
+  OTHER // інше (навчання, донорський день тощо)
+}
+
+enum AbsenceStatus {
+  PENDING // подано, чекає рішення менеджера
+  APPROVED
+  REJECTED
+  CANCELLED // скасовано автором
+}
+
+/// Відсутність співробітника на проміжку днів.
+///
+/// Свідомо окрема сутність, а не прапорець isDayOff у графіку: відсутність
+/// має тип, період, автора рішення й історію, і мусить існувати ще ДО того,
+/// як графік на цей тиждень узагалі згенерований.
+model Absence {
+  id           Int           @id @default(autoincrement())
+  userId       Int           @map("user_id")
+  type         AbsenceType
+  status       AbsenceStatus @default(PENDING)
+  /// Обидві межі включно, час нормалізується до початку дня
+  startDate    DateTime      @map("start_date")
+  endDate      DateTime      @map("end_date")
+  reason       String?
+  /// Коментар того, хто ухвалив рішення (найчастіше — причина відмови)
+  reviewComment String?      @map("review_comment")
+  reviewedById Int?          @map("reviewed_by_id")
+  reviewedAt   DateTime?     @map("reviewed_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  user       User  @relation("AbsenceOwner", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("AbsenceReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, startDate])
+  @@index([status])
+  @@map("absences")
 }
 
 model ScheduleWish {

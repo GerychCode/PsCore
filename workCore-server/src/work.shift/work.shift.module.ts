@@ -9,9 +9,17 @@ import { UserModule } from '../user/user.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EventsModule } from '../events/events.module';
 import { ShiftSessionModule } from './shift.session.module';
+import { ShiftAutoCloseService } from './shift.autoclose.service';
+import { TagRuleModule } from '../work.shift.tag/tag-rule.module';
 
 @Module({
-  imports: [EventsModule, UserModule, NotificationsModule, ShiftSessionModule],
+  imports: [
+    EventsModule,
+    UserModule,
+    NotificationsModule,
+    ShiftSessionModule,
+    TagRuleModule,
+  ],
   controllers: [WorkShiftController],
   providers: [
     WorkShiftService,
@@ -19,6 +27,8 @@ import { ShiftSessionModule } from './shift.session.module';
     UserService,
     FileStorageService,
     DepartmentService,
+    ShiftAutoCloseService,
   ],
+  exports: [ShiftAutoCloseService],
 })
 export class WorkShiftModule {}

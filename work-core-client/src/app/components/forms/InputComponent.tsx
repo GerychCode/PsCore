@@ -7,7 +7,10 @@ import { format } from 'date-fns'
 import { uk } from 'date-fns/locale'
 import { FaCalendarAlt, FaClock } from 'react-icons/fa'
 
-interface IInput {
+interface IInput extends Omit<
+    React.InputHTMLAttributes<HTMLInputElement>,
+    'type' | 'defaultValue' | 'name'
+> {
     id?: string
     label?: string | null
     defaultValue?: string

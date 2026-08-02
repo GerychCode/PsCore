@@ -145,4 +145,28 @@ describe('ChatService', () => {
       expect(events.emitToUser).not.toHaveBeenCalled();
     });
   });
+
+  describe('дублювання в Telegram і лічильник', () => {
+    it('шле в Telegram, якщо отримувач увімкнув chat.telegram (з іменем)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 2,
+        telegramId: '999',
+        notificationPrefs: { chat: { telegram: true } },
+      });
+      prisma.chatMessage.create.mockResolvedValue({
+        id: 11,
+        sender: { id: 1, firstName: 'І', lastName: 'П' },
+      });
+      await service.sendMessage(1, 2, 'привіт');
+      expect(telegram.sendMessage).toHaveBeenCalledWith(
+        '999',
+        expect.stringContaining('І П'),
+      );
+    });
+
+    it('getUnreadCount повертає { count }', async () => {
+      prisma.chatMessage.count.mockResolvedValue(3);
+      await expect(service.getUnreadCount(2)).resolves.toEqual({ count: 3 });
+    });
+  });
 });

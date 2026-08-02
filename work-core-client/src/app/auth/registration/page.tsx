@@ -14,8 +14,15 @@ type Inputs = { password: string; confirm: string }
 
 const InviteForm = () => {
   const params = useSearchParams()
-  const token = params.get('token') ?? ''
+  // Токен запрошення захоплюємо один раз і прибираємо з URL (історія/Referer)
+  const [token] = useState(() => params.get('token') ?? '')
   const router = useRouter()
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   const [info, setInfo] = useState<IInvitationInfo | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'invalid'>(

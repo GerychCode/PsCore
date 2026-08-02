@@ -3,6 +3,9 @@
 # ==========================================
 FROM node:20-alpine AS development
 
+# tzdata — щоб змінна TZ (Europe/Kyiv) давала коректний локальний час
+RUN apk add --no-cache tzdata
+
 # Встановлюємо робочу директорію всередині контейнера
 WORKDIR /app
 
@@ -28,6 +31,9 @@ CMD ["npm", "run", "start:dev"]
 # ==========================================
 FROM node:20-alpine AS production
 
+# tzdata — щоб змінна TZ (Europe/Kyiv) давала коректний локальний час
+RUN apk add --no-cache tzdata
+
 WORKDIR /app
 
 COPY package*.json ./
@@ -42,6 +48,10 @@ RUN npx prisma generate
 
 # Збираємо (білдимо) NestJS додаток для продакшену
 RUN npm run build
+
+# SECURITY: не працюємо від root. Каталог uploads має бути записуваним для node.
+RUN mkdir -p /app/uploads && chown -R node:node /app
+USER node
 
 EXPOSE 3022
 

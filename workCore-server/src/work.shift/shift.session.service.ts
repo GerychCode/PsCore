@@ -1,22 +1,41 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { endOfDay, format, startOfDay } from 'date-fns';
+import { endOfDay, format, getISODay, startOfDay } from 'date-fns';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
 import { EventsGateway } from '../events/events.gateway';
 import { $Enums, WorkSchedule, WorkShift } from '../../generated/prisma';
 import ShiftStatus = $Enums.ShiftStatus;
+import {
+  SYSTEM_TAGS,
+  SystemTagSpec,
+} from '../work.shift.tag/system-tags';
+import { TagRuleEngine } from '../work.shift.tag/tag-rule.engine';
+import { ShiftRuleContext } from '../work.shift.tag/tag-rule.types';
+import { Coords, isWithinRadius } from '../common/utils/geo';
+
+export type ShiftStartCheck =
+  | { status: 'ALREADY_ACTIVE'; startedAt?: string }
+  | { status: 'NO_SCHEDULE'; departments: { id: number; name: string }[] }
+  | { status: 'NO_DEPARTMENT' }
+  | { status: 'OVERLAP' }
+  | {
+      status: 'OK';
+      departmentId: number;
+      departmentName: string;
+      departmentTelegramId: string | null;
+      offSchedule: boolean;
+    };
 
 export type StartShiftResult =
-  | { status: 'ALREADY_ACTIVE'; startedAt?: string }
-  | { status: 'NO_SCHEDULE' }
-  | { status: 'OVERLAP' }
+  | Exclude<ShiftStartCheck, { status: 'OK' }>
   | {
       status: 'STARTED';
       time: string;
       departmentName: string;
-      scheduledStart: string;
-      scheduledEnd: string;
+      scheduledStart?: string;
+      scheduledEnd?: string;
       late: boolean;
+      offSchedule: boolean;
     };
 
 export type EndShiftResult =
@@ -38,37 +57,54 @@ export class ShiftSessionService {
     private readonly prismaService: PrismaService,
     private readonly userService: UserService,
     private readonly eventsGateway: EventsGateway,
+    private readonly tagRuleEngine: TagRuleEngine,
   ) {}
 
-  async getSystemTag(name: string, severity: number) {
-    let tag = await this.prismaService.tag.findUnique({ where: { name } });
-    if (!tag) {
-      tag = await this.prismaService.tag.create({ data: { name, severity } });
-    }
-    return tag;
+  /**
+   * Гарантує існування системного тега з актуальними метаданими
+   * (isSystem/color/description). upsert — щоб паралельні перші виклики
+   * не падали на unique(name).
+   */
+  async getSystemTag(spec: SystemTagSpec) {
+    return this.prismaService.tag.upsert({
+      where: { name: spec.name },
+      update: {
+        isSystem: true,
+        color: spec.color,
+        description: spec.description,
+      },
+      create: {
+        name: spec.name,
+        severity: spec.severity,
+        isSystem: true,
+        color: spec.color,
+        description: spec.description,
+      },
+    });
   }
 
   /**
-   * Визначає системні теги зміни відносно розкладу:
-   * «Поза графіком», «У вихідний», «Запізнення».
+   * Визначає системні теги зміни відносно розкладу. Теги комбінуються:
+   * напр. вихідний + запізнення можуть висіти разом.
    */
   async resolveScheduleTags(
     schedule: WorkSchedule | null,
     startedAt: string,
   ): Promise<{ id: number }[]> {
+    const specs: SystemTagSpec[] = [];
+
     if (!schedule) {
-      const tag = await this.getSystemTag('Поза графіком', 2);
-      return [{ id: tag.id }];
+      specs.push(SYSTEM_TAGS.OFF_SCHEDULE);
+    } else {
+      if (schedule.isDayOff) specs.push(SYSTEM_TAGS.DAY_OFF);
+      // startedAt/schedule.startedAt — рядки "HH:mm", лексикографічне порівняння коректне
+      if (schedule.startedAt && startedAt > schedule.startedAt) {
+        specs.push(SYSTEM_TAGS.LATE);
+      }
     }
-    if (schedule.isDayOff) {
-      const tag = await this.getSystemTag('У вихідний', 2);
-      return [{ id: tag.id }];
-    }
-    if (startedAt > schedule.startedAt) {
-      const tag = await this.getSystemTag('Запізнення', 2);
-      return [{ id: tag.id }];
-    }
-    return [];
+
+    const tags = await Promise.all(specs.map((s) => this.getSystemTag(s)));
+    return tags.map((t) => ({ id: t.id }));
   }
 
   /** Кидає BadRequest, якщо інтервал перетинається з існуючими змінами дня. */
@@ -117,21 +153,63 @@ export class ShiftSessionService {
     this.eventsGateway.emitToUsers(usersToNotify, 'invalidate_shifts');
   }
 
-  async startShift(userId: number): Promise<StartShiftResult> {
+  /** Графік користувача на сьогодні (з назвою відділення). */
+  private findTodaySchedule(userId: number, now: Date) {
+    return this.prismaService.workSchedule.findFirst({
+      where: {
+        userId,
+        date: { gte: startOfDay(now), lte: endOfDay(now) },
+      },
+      include: {
+        department: { select: { name: true, telegramId: true } },
+      },
+    });
+  }
+
+  /**
+   * Перевіряє, чи може користувач почати зміну, не створюючи її.
+   * Якщо на сьогодні немає графіка, повертає NO_SCHEDULE зі списком відділень
+   * користувача; повторний виклик з offScheduleDepartmentId дає OK
+   * (offSchedule = true).
+   */
+  async checkShiftStart(
+    userId: number,
+    offScheduleDepartmentId?: number,
+  ): Promise<ShiftStartCheck> {
     const activeShift = await this.findActiveShift(userId);
     if (activeShift) {
       return { status: 'ALREADY_ACTIVE', startedAt: activeShift.startedAt };
     }
 
     const now = new Date();
-    const schedule = await this.prismaService.workSchedule.findFirst({
-      where: {
-        userId,
-        date: { gte: startOfDay(now), lte: endOfDay(now) },
-      },
-      include: { department: { select: { name: true } } },
-    });
-    if (!schedule) return { status: 'NO_SCHEDULE' };
+    const schedule = await this.findTodaySchedule(userId, now);
+
+    let departmentId: number;
+    let departmentName: string;
+    let departmentTelegramId: string | null;
+    if (schedule) {
+      departmentId = schedule.departmentId;
+      departmentName = (schedule as any).department?.name ?? '—';
+      departmentTelegramId = (schedule as any).department?.telegramId ?? null;
+    } else {
+      const departments = await this.prismaService.department.findMany({
+        where: { members: { some: { id: userId } } },
+        select: { id: true, name: true, telegramId: true },
+      });
+      if (!departments.length) return { status: 'NO_DEPARTMENT' };
+
+      const chosen = departments.find((d) => d.id === offScheduleDepartmentId);
+      if (!chosen) {
+        return {
+          status: 'NO_SCHEDULE',
+          departments: departments.map(({ id, name }) => ({ id, name })),
+        };
+      }
+
+      departmentId = chosen.id;
+      departmentName = chosen.name;
+      departmentTelegramId = chosen.telegramId;
+    }
 
     const dayShifts = await this.prismaService.workShift.findMany({
       where: {
@@ -146,30 +224,121 @@ export class ShiftSessionService {
       return { status: 'OVERLAP' };
     }
 
-    const currentTime = format(now, 'HH:mm');
-    const tagsToConnect = await this.resolveScheduleTags(schedule, currentTime);
+    return {
+      status: 'OK',
+      departmentId,
+      departmentName,
+      departmentTelegramId,
+      offSchedule: !schedule,
+    };
+  }
 
-    await this.prismaService.workShift.create({
-      data: {
-        userId,
-        departmentId: schedule.departmentId,
-        date: now,
-        startedAt: currentTime,
-        endTime: '',
-        totalHours: 0,
-        status: ShiftStatus.PENDING,
-        tags: { connect: tagsToConnect },
-      },
+  /**
+   * Створює зміну після успішних перевірок. startedAt дозволяє зафіксувати
+   * час початку раніше за момент виклику (напр., момент натискання кнопки
+   * в боті, до проходження верифікації).
+   */
+  /**
+   * Тег «далеко від відділення», якщо геоперевірка увімкнена і позиція
+   * працівника поза радіусом. Невідома позиція тегу не дає: див. коментар
+   * до isWithinRadius — це позначка, а не заборона працювати.
+   */
+  private async resolveGeoTags(
+    departmentId: number,
+    coords?: Coords | null,
+  ): Promise<{ id: number }[]> {
+    const department = await this.prismaService.department.findUnique({
+      where: { id: departmentId },
+      select: { latitude: true, longitude: true, geofenceRadiusM: true },
     });
+    if (!department) return [];
+
+    const result = isWithinRadius(department, department.geofenceRadiusM, coords);
+    if (!result || result.within) return [];
+
+    const tag = await this.getSystemTag(SYSTEM_TAGS.FAR_FROM_SITE);
+    return [{ id: tag.id }];
+  }
+
+  async startShift(
+    userId: number,
+    offScheduleDepartmentId?: number,
+    startedAt?: Date,
+    coords?: Coords | null,
+  ): Promise<StartShiftResult> {
+    const check = await this.checkShiftStart(userId, offScheduleDepartmentId);
+    if (check.status !== 'OK') return check;
+
+    const startMoment = startedAt ?? new Date();
+    const schedule = await this.findTodaySchedule(userId, startMoment);
+    const currentTime = format(startMoment, 'HH:mm');
+    const tagsToConnect = [
+      ...(await this.resolveScheduleTags(schedule, currentTime)),
+      ...(await this.resolveGeoTags(check.departmentId, coords)),
+    ];
+
+    // Атомарний старт: advisory-lock по userId серіалізує паралельні спроби
+    // (веб+бот / подвійний тап), а повторна перевірка активної зміни всередині
+    // транзакції прибирає TOCTOU-гонку «дві активні зміни».
+    let createdShiftId: number | undefined;
+    try {
+      await this.prismaService.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${userId})`;
+        const active = await tx.workShift.findFirst({
+          where: { userId, endTime: '' },
+          select: { id: true },
+        });
+        if (active) throw new Error('ALREADY_ACTIVE');
+        const created = await tx.workShift.create({
+          data: {
+            userId,
+            departmentId: check.departmentId,
+            date: startMoment,
+            startedAt: currentTime,
+            endTime: '',
+            totalHours: 0,
+            status: ShiftStatus.PENDING,
+            tags: { connect: tagsToConnect },
+          },
+        });
+        createdShiftId = created.id;
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message === 'ALREADY_ACTIVE') {
+        return { status: 'ALREADY_ACTIVE' };
+      }
+      throw e;
+    }
+
+    // Кастомні правила «на початок зміни»
+    if (createdShiftId) {
+      const late =
+        !!schedule && !schedule.isDayOff && currentTime > schedule.startedAt;
+      const ctx: ShiftRuleContext = {
+        userId,
+        departmentId: check.departmentId,
+        totalHours: 0,
+        startHour: parseInt(currentTime.split(':')[0], 10),
+        endHour: null,
+        weekday: getISODay(startMoment),
+        late,
+        offSchedule: check.offSchedule,
+        isDayOff: !!schedule?.isDayOff,
+        status: ShiftStatus.PENDING,
+      };
+      await this.tagRuleEngine.apply('SHIFT_STARTED', createdShiftId, ctx);
+    }
 
     await this.notifyShiftChanged(userId);
     return {
       status: 'STARTED',
       time: currentTime,
-      departmentName: (schedule as any).department?.name ?? '—',
-      scheduledStart: schedule.startedAt,
-      scheduledEnd: schedule.endTime,
-      late: !schedule.isDayOff && currentTime > schedule.startedAt,
+      departmentName: check.departmentName,
+      scheduledStart: schedule?.startedAt,
+      scheduledEnd: schedule?.endTime,
+      late:
+        !!schedule && !schedule.isDayOff && currentTime > schedule.startedAt,
+      offSchedule: check.offSchedule,
     };
   }
 
@@ -180,15 +349,47 @@ export class ShiftSessionService {
     const now = new Date();
     const endTime = format(now, 'HH:mm');
 
+    // Рахуємо за повними датами-часами, а не за рядком HH:mm — інакше зміна
+    // через північ (напр. 23:00→01:00) давала відʼємні хвилини → 0 годин.
     const [startHour, startMin] = activeShift.startedAt.split(':').map(Number);
-    const totalMinutes =
-      now.getHours() * 60 + now.getMinutes() - (startHour * 60 + startMin);
-    const totalHours = Math.max(Number((totalMinutes / 60).toFixed(2)), 0);
+    const start = new Date(activeShift.date);
+    start.setHours(startHour, startMin, 0, 0);
+    const totalHours = Math.max(
+      Number(((now.getTime() - start.getTime()) / 3_600_000).toFixed(2)),
+      0,
+    );
 
     await this.prismaService.workShift.update({
       where: { id: activeShift.id },
       data: { endTime, totalHours },
     });
+
+    // Кастомні правила «на завершення зміни»
+    const scheduleForCtx = await this.prismaService.workSchedule.findFirst({
+      where: {
+        userId,
+        date: {
+          gte: startOfDay(activeShift.date),
+          lte: endOfDay(activeShift.date),
+        },
+      },
+    });
+    const ctx: ShiftRuleContext = {
+      userId,
+      departmentId: activeShift.departmentId,
+      totalHours,
+      startHour,
+      endHour: parseInt(endTime.split(':')[0], 10),
+      weekday: getISODay(activeShift.date),
+      late:
+        !!scheduleForCtx &&
+        !scheduleForCtx.isDayOff &&
+        activeShift.startedAt > scheduleForCtx.startedAt,
+      offSchedule: !scheduleForCtx,
+      isDayOff: !!scheduleForCtx?.isDayOff,
+      status: activeShift.status,
+    };
+    await this.tagRuleEngine.apply('SHIFT_ENDED', activeShift.id, ctx);
 
     await this.notifyShiftChanged(userId);
     return {

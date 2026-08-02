@@ -13,6 +13,7 @@ import { departmentService } from '@/service/department.service'
 import { FaTrash } from 'react-icons/fa'
 import { toast } from 'sonner'
 import Avatar from '@/app/components/user/Avatar'
+import DepartmentTelegramLink from './Department.TelegramLink'
 
 interface DepartmentModalProps {
     isOpen: boolean
@@ -112,6 +113,16 @@ const DepartmentModal: React.FC<DepartmentModalProps> = ({
             Number(weekendStaff)
         )
 
+        // Порожнє поле = «взяти дефолт із коду», тому null, а не 0:
+        // 0 у цих полях означає «обмеження вимкнено», це різні речі.
+        const numOrNull = (v: unknown) =>
+            v === undefined || v === '' || v === null ? null : Number(v)
+
+        dataToSend.maxHoursPerWeek = numOrNull(data.maxHoursPerWeek)
+        dataToSend.maxConsecutiveDays = numOrNull(data.maxConsecutiveDays)
+        dataToSend.minRestHours = numOrNull(data.minRestHours)
+        dataToSend.geofenceRadiusM = numOrNull(data.geofenceRadiusM)
+
         if (isEditMode && department) {
             // Членство зберігаємо окремим запитом (m2m)
             try {
@@ -202,6 +213,49 @@ const DepartmentModal: React.FC<DepartmentModalProps> = ({
                             placeholder='30.5234'
                             type='number'
                         />
+                        <InputComponent
+                            {...register('geofenceRadiusM')}
+                            label='Радіус перевірки місця, м'
+                            placeholder='порожньо = вимкнено'
+                            type='number'
+                        />
+                    </div>
+                    <p className='text-sm text-gray-500 -mt-3'>
+                        Якщо радіус заданий, бот попросить геолокацію при відкритті
+                        зміни. Зміну поза радіусом не блокуємо — лише позначаємо
+                        тегом: GPS у приміщенні часто помиляється на сотні метрів.
+                    </p>
+
+                    {/* Обмеження навантаження для генератора графіка */}
+                    <div>
+                        <h2 className='text-lg font-semibold text-black mb-1'>
+                            Обмеження навантаження
+                        </h2>
+                        <p className='text-sm text-gray-500 mb-3'>
+                            Тверді межі при автогенерації: людину, що їх порушує,
+                            генератор не поставить узагалі. Порожнє поле — значення
+                            за замовчуванням, <b>0</b> — обмеження вимкнено.
+                        </p>
+                        <div className='grid grid-cols-1 sm:grid-cols-3 gap-5'>
+                            <InputComponent
+                                {...register('maxHoursPerWeek')}
+                                label='Годин на тиждень'
+                                placeholder='40'
+                                type='number'
+                            />
+                            <InputComponent
+                                {...register('maxConsecutiveDays')}
+                                label='Днів поспіль'
+                                placeholder='6'
+                                type='number'
+                            />
+                            <InputComponent
+                                {...register('minRestHours')}
+                                label='Відпочинок між змінами, год'
+                                placeholder='11'
+                                type='number'
+                            />
+                        </div>
                     </div>
 
                     {/* Потрібний штат для автогенерації графіка */}
@@ -272,6 +326,13 @@ const DepartmentModal: React.FC<DepartmentModalProps> = ({
                                 ))}
                             </div>
                         </div>
+                    )}
+
+                    {isEditMode && department && (
+                        <DepartmentTelegramLink
+                            departmentId={department.id}
+                            departmentName={department.name}
+                        />
                     )}
 
                     {isEditMode && (

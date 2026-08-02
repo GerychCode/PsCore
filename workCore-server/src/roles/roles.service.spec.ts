@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { RolesService, Actor } from './roles.service';
 import { Permission } from '../common/permissions/permission.enum';
 
@@ -29,7 +33,8 @@ describe('RolesService (анти-ескалація)', () => {
       },
       user: { findUnique: jest.fn(), update: jest.fn() },
     };
-    service = new RolesService(prisma);
+    const audit = { log: jest.fn().mockResolvedValue(undefined) } as any;
+    service = new RolesService(prisma, audit);
   });
 
   describe('create', () => {
@@ -142,6 +147,157 @@ describe('RolesService (анти-ескалація)', () => {
         { id: 5, permissions: [Permission.ADMINISTRATOR], position: 100 },
       ]);
       await service.setUserRoles(admin, 9, [5]);
+      expect(prisma.user.update).toHaveBeenCalled();
+    });
+
+    it('серед переданих ролей є неіснуючі → BadRequest', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 9, appRoles: [] });
+      prisma.appRole.findMany.mockResolvedValue([]); // 0 знайдено при 1 запитаній
+      await expect(service.setUserRoles(admin, 9, [77])).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('користувача не знайдено → NotFound', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.setUserRoles(admin, 9, [1])).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('onModuleInit / ensureSystemRole', () => {
+    it('створює системні ролі, яких немає', async () => {
+      prisma.appRole.findUnique.mockResolvedValue(null);
+      await service.onModuleInit();
+      expect(prisma.appRole.create).toHaveBeenCalled();
+    });
+
+    it('не створює наявні системні ролі', async () => {
+      prisma.appRole.findUnique.mockResolvedValue({ id: 1 });
+      await service.onModuleInit();
+      expect(prisma.appRole.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('прості методи', () => {
+    it('listPermissions повертає перелік', () => {
+      expect(service.listPermissions().length).toBeGreaterThan(0);
+    });
+
+    it('getAll → findMany', async () => {
+      await service.getAll();
+      expect(prisma.appRole.findMany).toHaveBeenCalled();
+    });
+
+    it('getById: знайдено / не знайдено', async () => {
+      prisma.appRole.findUnique.mockResolvedValue({ id: 3 });
+      await expect(service.getById(3)).resolves.toEqual({ id: 3 });
+      prisma.appRole.findUnique.mockResolvedValue(null);
+      await expect(service.getById(3)).rejects.toThrow(NotFoundException);
+    });
+
+    it('getUserRoles: знайдено / не знайдено', async () => {
+      prisma.user.findUnique.mockResolvedValue({ appRoles: [{ id: 1 }] });
+      await expect(service.getUserRoles(3)).resolves.toEqual([{ id: 1 }]);
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.getUserRoles(3)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('create — дублікат назви й дефолт', () => {
+    it('дублікат назви → BadRequest', async () => {
+      prisma.appRole.findFirst.mockResolvedValue({ id: 1 });
+      await expect(
+        service.create(admin, { name: 'Зайнято', position: 10 } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('isDefault → clearDefault (updateMany)', async () => {
+      prisma.appRole.findFirst.mockResolvedValue(null);
+      await service.create(admin, {
+        name: 'Новий дефолт',
+        permissions: [],
+        position: 10,
+        isDefault: true,
+      } as any);
+      expect(prisma.appRole.updateMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('update — повний потік', () => {
+    const editable = {
+      id: 5,
+      name: 'Стара',
+      permissions: [Permission.MANAGE_ROLES],
+      position: 10,
+      isSystem: false,
+      isDefault: false,
+    };
+
+    it('оновлює назву (перевіряє унікальність)', async () => {
+      prisma.appRole.findUnique.mockResolvedValue(editable);
+      prisma.appRole.findFirst.mockResolvedValue(null);
+      await service.update(admin, 5, { name: 'Нова' } as any);
+      expect(prisma.appRole.update).toHaveBeenCalled();
+    });
+
+    it('права системної ролі змінювати не можна', async () => {
+      prisma.appRole.findUnique.mockResolvedValue({
+        ...editable,
+        isSystem: true,
+      });
+      await expect(
+        service.update(admin, 5, {
+          permissions: [Permission.MANAGE_USERS],
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('isDefault → clearDefault', async () => {
+      prisma.appRole.findUnique.mockResolvedValue(editable);
+      await service.update(admin, 5, { isDefault: true } as any);
+      expect(prisma.appRole.updateMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('remove', () => {
+    it('системну роль видалити не можна', async () => {
+      prisma.appRole.findUnique.mockResolvedValue({
+        id: 5,
+        isSystem: true,
+        permissions: [],
+        position: 0,
+      });
+      await expect(service.remove(admin, 5)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('адмін видаляє звичайну роль', async () => {
+      prisma.appRole.findUnique.mockResolvedValue({
+        id: 5,
+        isSystem: false,
+        permissions: [Permission.MANAGE_ROLES],
+        position: 10,
+        name: 'X',
+      });
+      const res = await service.remove(admin, 5);
+      expect(prisma.appRole.delete).toHaveBeenCalledWith({ where: { id: 5 } });
+      expect(res).toEqual({ success: true });
+    });
+  });
+
+  describe('assignDefaultRole', () => {
+    it('немає дефолтної ролі → нічого', async () => {
+      prisma.appRole.findFirst.mockResolvedValue(null);
+      await service.assignDefaultRole(9);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('є дефолтна роль → приєднує', async () => {
+      prisma.appRole.findFirst.mockResolvedValue({ id: 2 });
+      await service.assignDefaultRole(9);
       expect(prisma.user.update).toHaveBeenCalled();
     });
   });

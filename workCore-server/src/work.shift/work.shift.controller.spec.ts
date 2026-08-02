@@ -3,6 +3,7 @@ import { WorkShiftController } from './work.shift.controller';
 describe('WorkShiftController', () => {
   let controller: WorkShiftController;
   let service: any;
+  let autoClose: any;
 
   const user = { id: 1, role: 'Admin' } as any;
 
@@ -14,7 +15,10 @@ describe('WorkShiftController', () => {
       updateWorkShiftDto: jest.fn().mockResolvedValue({ id: 1 }),
       deleteShift: jest.fn().mockResolvedValue({ id: 1 }),
     };
-    controller = new WorkShiftController(service);
+    autoClose = {
+      closeActiveShifts: jest.fn().mockResolvedValue({ closed: 0 }),
+    };
+    controller = new WorkShiftController(service, autoClose);
   });
 
   it('getWorkShifts делегує з фільтром', async () => {
@@ -23,9 +27,9 @@ describe('WorkShiftController', () => {
     expect(service.getWorkShifts).toHaveBeenCalledWith(user, filter);
   });
 
-  it('getWorkShiftById делегує за id', async () => {
-    await controller.getWorkShiftById(3);
-    expect(service.getWorkShiftById).toHaveBeenCalledWith(3);
+  it('getWorkShiftById делегує за id з перевіркою власника', async () => {
+    await controller.getWorkShiftById(user, 3);
+    expect(service.getWorkShiftById).toHaveBeenCalledWith(3, user);
   });
 
   it('createWorkShift делегує', async () => {
@@ -43,5 +47,10 @@ describe('WorkShiftController', () => {
   it('deleteWorkShiftById делегує', async () => {
     await controller.deleteWorkShiftById(user, 3);
     expect(service.deleteShift).toHaveBeenCalledWith(user, 3);
+  });
+
+  it('runAutoClose делегує в autoCloseService', async () => {
+    await controller.runAutoClose();
+    expect(autoClose.closeActiveShifts).toHaveBeenCalled();
   });
 });

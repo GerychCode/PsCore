@@ -1,12 +1,9 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  implementation: 'sass-embedded',
   reactStrictMode: false,
-  devIndicators: {
-    buildActivity: false, // Вимикає індикатор завантаження/компіляції
-    appIsrStatus: false, // Вимикає індикатор статичних/динамічних роутів (особливо актуально для Next.js 15)
-  },
+  // Вимикає dev-індикатори завантаження/компіляції
+  devIndicators: false,
   images: {
     remotePatterns: [
       {
@@ -16,6 +13,29 @@ const nextConfig: NextConfig = {
         pathname: '/uploads/**',
       },
     ],
+  },
+  // Заголовки безпеки для всіх сторінок фронта
+  async headers() {
+    const securityHeaders = [
+      { key: 'X-Frame-Options', value: 'DENY' },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      // Токени приходять у query (?token=) — не зливати їх у Referer
+      { key: 'Referrer-Policy', value: 'no-referrer' },
+      {
+        key: 'Permissions-Policy',
+        value: 'camera=(), microphone=(), geolocation=()',
+      },
+      // HSTS вмикати лише коли фронт віддається через HTTPS
+      ...(process.env.NEXT_PUBLIC_SERVER_PROTOCOL === 'https'
+        ? [
+            {
+              key: 'Strict-Transport-Security',
+              value: 'max-age=31536000; includeSubDomains',
+            },
+          ]
+        : []),
+    ]
+    return [{ source: '/:path*', headers: securityHeaders }]
   },
 }
 

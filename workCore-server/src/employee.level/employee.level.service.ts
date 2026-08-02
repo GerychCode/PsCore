@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '../../generated/prisma';
+import { SYSTEM_TAGS } from '../work.shift.tag/system-tags';
 
 export interface ShiftEvaluation {
   score: number;
@@ -27,8 +28,21 @@ export interface EmployeeLevel {
 interface EvaluableShift {
   status: string;
   totalHours?: number | null;
-  tags?: { severity: number }[];
+  tags?: { name?: string; severity: number }[];
 }
+
+/**
+ * Теги, які НЕ є провиною працівника: вони описують обставини, а не поведінку.
+ * «Поза графіком» здебільшого означає, що графік не заповнили; «У вихідний» —
+ * що людина вийшла підмінити колегу. Штрафувати за це немає за що.
+ */
+const NEUTRAL_TAGS: readonly string[] = [
+  SYSTEM_TAGS.OFF_SCHEDULE.name,
+  SYSTEM_TAGS.DAY_OFF.name,
+];
+
+/** Теги, за які треба доплачувати балами, а не віднімати їх. */
+const BONUS_TAGS: readonly string[] = [SYSTEM_TAGS.OVERTIME.name];
 
 @Injectable()
 export class EmployeeLevelService {
@@ -53,13 +67,35 @@ export class EmployeeLevelService {
     score += Math.floor(shift.totalHours ?? 0) * this.XP_PER_HOUR;
 
     const tags = shift.tags ?? [];
-    const penalty = tags.reduce(
-      (acc, tag) => acc + tag.severity * this.PENALTY_PER_SEVERITY,
-      0,
-    );
-    score -= penalty;
 
-    const clean = shift.status === 'APPROVED' && tags.length === 0;
+    // Раніше штрафувався БУДЬ-ЯКИЙ тег, включно з «Понаднормово»: зміна на
+    // дві години довша давала на 2 бали МЕНШЕ за звичайну (−2 штраф і −2
+    // втрачений бонус за чистоту). Тепер теги розділені за змістом.
+    let penalty = 0;
+    let bonus = 0;
+    let hasPenaltyTag = false;
+
+    for (const tag of tags) {
+      const name = tag.name ?? '';
+      if (NEUTRAL_TAGS.includes(name)) continue;
+
+      if (BONUS_TAGS.includes(name)) {
+        bonus += tag.severity * this.PENALTY_PER_SEVERITY;
+        continue;
+      }
+
+      // Решта — і системні відхилення, і кастомні теги адміна: штраф
+      penalty += tag.severity * this.PENALTY_PER_SEVERITY;
+      hasPenaltyTag = true;
+    }
+
+    score += bonus - penalty;
+
+    // Вимоги APPROVED тут більше немає. Вона робила метрику залежною від
+    // щоденної ручної праці адміна: поки зміни лишались PENDING, надійність
+    // у всіх дорівнювала нулю, і доданок reliability у скорингу генератора
+    // перетворювався на константу, тобто не працював зовсім.
+    const clean = !hasPenaltyTag;
     if (clean) {
       score += this.CLEAN_BONUS;
     }

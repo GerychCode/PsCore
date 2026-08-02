@@ -22,9 +22,16 @@ const Page = () => {
 
   const router = useRouter()
 
-  const { mutate, isPending } = useLoginMutation(reset, setError, () =>
-    router.replace(PathConfig.DASHBOARD)
-  )
+  const { mutate, isPending } = useLoginMutation(reset, setError, () => {
+    // Повертаємось туди, звідки перекинуло на логін (?redirect=…),
+    // але лише на внутрішній шлях — захист від open redirect
+    const redirect = new URLSearchParams(window.location.search).get('redirect')
+    const safe =
+      redirect && redirect.startsWith('/') && !redirect.startsWith('//')
+        ? redirect
+        : PathConfig.DASHBOARD
+    router.replace(safe)
+  })
 
   const onSubmit: SubmitHandler<IUserLogin> = (data) => {
     mutate(data)

@@ -1,4 +1,8 @@
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import {
+  createParamDecorator,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { User } from '../../../generated/prisma';
 
 export const Authorized = createParamDecorator(
@@ -10,7 +14,8 @@ export const Authorized = createParamDecorator(
     const user = request.user as User | undefined;
 
     if (!user) {
-      throw new Error('Користувача не знайдено!');
+      // Коректний 401 замість голого Error (→ 500)
+      throw new UnauthorizedException('Користувача не авторизовано.');
     }
 
     return data ? user[data] : user;

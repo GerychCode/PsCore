@@ -29,11 +29,13 @@ export class AuthController {
   changePassword(
     @Authorized('id') userId: number,
     @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
   ) {
     return this.authService.changePassword(
       userId,
       dto.currentPassword,
       dto.newPassword,
+      req.sessionID,
     );
   }
 

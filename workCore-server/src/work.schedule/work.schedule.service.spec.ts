@@ -9,6 +9,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DepartmentService } from '../department/department.service';
 import { UserService } from '../user/user.service';
 import { EventsGateway } from '../events/events.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { Prisma } from '../../generated/prisma';
 
 describe('WorkScheduleService', () => {
   let service: WorkScheduleService;
@@ -16,6 +18,7 @@ describe('WorkScheduleService', () => {
   let departmentService: { getDepartmentById: jest.Mock };
   let userService: { findById: jest.Mock };
   let events: { server: { emit: jest.Mock } };
+  let notifications: { createNotification: jest.Mock };
 
   const admin = { id: 1, role: 'Admin' } as any;
   const employee = { id: 2, role: 'Employe' } as any;
@@ -45,8 +48,14 @@ describe('WorkScheduleService', () => {
         upsert: jest.fn(),
       },
       department: { findMany: jest.fn().mockResolvedValue([]) },
-      user: { findMany: jest.fn().mockResolvedValue([]) },
+      // count — перевірка членства у відділенні; за замовчуванням "член є"
+      user: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      shiftSwap: { findMany: jest.fn().mockResolvedValue([]) },
     };
+    notifications = { createNotification: jest.fn().mockResolvedValue(null) };
     departmentService = {
       getDepartmentById: jest.fn().mockResolvedValue({ id: 1 }),
     };
@@ -60,6 +69,7 @@ describe('WorkScheduleService', () => {
         { provide: DepartmentService, useValue: departmentService },
         { provide: UserService, useValue: userService },
         { provide: EventsGateway, useValue: events },
+        { provide: NotificationsService, useValue: notifications },
       ],
     }).compile();
 
@@ -71,7 +81,7 @@ describe('WorkScheduleService', () => {
   describe('getWorkSchedules', () => {
     it('повертає графіки за фільтром', async () => {
       prisma.workSchedule.findMany.mockResolvedValue([{ id: 1 }]);
-      const res = await service.getWorkSchedules({
+      const res = await service.getWorkSchedules(admin, {
         userId: 2,
         departmentId: 1,
         dateFrom: '2026-06-01',
@@ -81,8 +91,89 @@ describe('WorkScheduleService', () => {
     });
 
     it('повертає всі графіки без фільтра', async () => {
-      await service.getWorkSchedules({} as any);
+      await service.getWorkSchedules(admin, {} as any);
       expect(prisma.workSchedule.findMany).toHaveBeenCalled();
+    });
+
+    it('працівнику віддає лише його опубліковані рядки', async () => {
+      await service.getWorkSchedules(employee, { userId: 999 } as any);
+      expect(prisma.workSchedule.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: employee.id,
+            isDraft: false,
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('захист від перепризначення і обходу замка', () => {
+    beforeEach(() => {
+      prisma.workSchedule.findUnique.mockResolvedValue(existing);
+      prisma.workSchedule.update.mockResolvedValue(existing);
+    });
+
+    it('працівник не може перекинути свою зміну іншому (userId)', async () => {
+      await expect(
+        service.updateWorkSchedule(employee, 1, { userId: 7 } as any),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.workSchedule.update).not.toHaveBeenCalled();
+    });
+
+    it('працівник не може перенести зміну в інше відділення', async () => {
+      await expect(
+        service.updateWorkSchedule(employee, 1, { departmentId: 9 } as any),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('менеджеру перепризначення дозволено', async () => {
+      await service.updateWorkSchedule(admin, 1, { userId: 7 } as any);
+      expect(prisma.workSchedule.update).toHaveBeenCalled();
+    });
+
+    it('замок тижня-джерела не обходиться зміною дати', async () => {
+      // вільний тиждень-призначення, залочений тиждень-джерело
+      prisma.workScheduleLock.findUnique
+        .mockResolvedValueOnce({ isLocked: true })
+        .mockResolvedValueOnce(null);
+      await expect(
+        service.updateWorkSchedule(employee, 1, {
+          date: '2026-06-15',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('створення в чужому відділенні заборонено працівнику', async () => {
+      prisma.user.count.mockResolvedValue(0);
+      await expect(
+        service.createWorkSchedule(employee, {
+          date: '2026-06-01',
+          departmentId: 99,
+          userId: employee.id,
+          startedAt: '09:00',
+          endTime: '18:00',
+        } as any),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('видалення з активним обміном', () => {
+    it('попереджає учасників пропозиції перед видаленням', async () => {
+      prisma.workSchedule.findUnique.mockResolvedValue(existing);
+      prisma.workSchedule.delete.mockResolvedValue(existing);
+      prisma.shiftSwap.findMany.mockResolvedValue([
+        { requesterId: 2, claimerId: 3 },
+      ]);
+
+      await service.deleteWorkSchedule(admin, 1);
+
+      // актор (admin, id=1) себе не сповіщає; решта — так
+      expect(notifications.createNotification).toHaveBeenCalledTimes(2);
+      expect(notifications.createNotification).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ title: 'Обмін скасовано' }),
+      );
     });
   });
 
@@ -139,6 +230,28 @@ describe('WorkScheduleService', () => {
       const res = await service.createWorkSchedule(admin, baseDto);
       expect(events.server.emit).toHaveBeenCalledWith('invalidate_schedules');
       expect(res).toEqual({ id: 7 });
+    });
+
+    it('нормалізує дату до початку дня', async () => {
+      prisma.workSchedule.create.mockResolvedValue({ id: 7 });
+      await service.createWorkSchedule(admin, baseDto);
+      const arg = prisma.workSchedule.create.mock.calls[0][0];
+      const d: Date = arg.data.date;
+      expect(d.getHours()).toBe(0);
+      expect(d.getMinutes()).toBe(0);
+    });
+
+    it('гонка unique(userId,date) → BadRequest замість 500', async () => {
+      prisma.workSchedule.findFirst.mockResolvedValue(null);
+      prisma.workSchedule.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', {
+          code: 'P2002',
+          clientVersion: '6.9.0',
+        }),
+      );
+      await expect(service.createWorkSchedule(admin, baseDto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -220,6 +333,74 @@ describe('WorkScheduleService', () => {
       expect(prisma.workScheduleLock.upsert).toHaveBeenCalled();
       expect(events.server.emit).toHaveBeenCalledWith('invalidate_schedules');
       expect(res).toEqual({ id: 1, isLocked: true });
+    });
+  });
+
+  describe('гілки помилок і адмін-перегляд', () => {
+    const p2002 = new Prisma.PrismaClientKnownRequestError('dup', {
+      code: 'P2002',
+      clientVersion: '6.9.0',
+    });
+
+    it('update: P2002 → BadRequest', async () => {
+      prisma.workSchedule.findUnique.mockResolvedValue(existing);
+      prisma.workSchedule.findFirst.mockResolvedValue(null);
+      prisma.workSchedule.update.mockRejectedValue(p2002);
+      await expect(
+        service.updateWorkSchedule(admin, 1, { startedAt: '10:00' } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('update: інша помилка прокидається далі', async () => {
+      prisma.workSchedule.findUnique.mockResolvedValue(existing);
+      prisma.workSchedule.update.mockRejectedValue(new Error('db'));
+      await expect(
+        service.updateWorkSchedule(admin, 1, { startedAt: '10:00' } as any),
+      ).rejects.toThrow('db');
+    });
+
+    it('create: інша помилка прокидається далі', async () => {
+      prisma.workSchedule.findFirst.mockResolvedValue(null);
+      prisma.workSchedule.create.mockRejectedValue(new Error('db'));
+      await expect(
+        service.createWorkSchedule(admin, {
+          date: '2026-06-01',
+          departmentId: 1,
+          userId: 2,
+          startedAt: '09:00',
+          endTime: '18:00',
+        } as any),
+      ).rejects.toThrow('db');
+    });
+
+    it('getWeekView (адмін) позначає порушені побажання', async () => {
+      prisma.department.findMany.mockResolvedValue([{ id: 1, name: 'A' }]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 2, firstName: 'X', lastName: 'Y' },
+      ]);
+      prisma.workSchedule.findMany.mockResolvedValue([
+        {
+          id: 10,
+          userId: 2,
+          departmentId: 1,
+          date: new Date(2026, 5, 3),
+          startedAt: '09:00',
+          endTime: '18:00',
+          isDayOff: false,
+          isDraft: true,
+        },
+      ]);
+      prisma.workScheduleLock.findMany.mockResolvedValue([]);
+      prisma.scheduleWish = {
+        findMany: jest.fn().mockResolvedValue([
+          { userId: 2, date: new Date(2026, 5, 3) },
+        ]),
+      };
+      const res = await service.getWeekView('2026-06-03T12:00:00', true);
+      const cell = res[0].users[0].schedule.find(
+        (s: any) => s && s.wishViolated,
+      );
+      expect(cell).toBeDefined();
     });
   });
 

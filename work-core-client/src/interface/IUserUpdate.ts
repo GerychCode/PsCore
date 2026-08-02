@@ -6,5 +6,5 @@ export interface IUserUpdate {
   dateOfBirth?: string
   phone?: string
   address?: string
-  avatar?: any
+  // avatar НЕ входить у профільний PUT — оновлюється лише через /user/avatar
 }

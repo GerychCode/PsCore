@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useRef, useMemo } from 'react'
+import { toast } from 'sonner'
 import { useGetShiftListMutation } from '@/hooks/shift/get.shift.list.mutation'
 import { format, parseISO } from 'date-fns'
 import { uk } from 'date-fns/locale'
@@ -25,15 +26,17 @@ import {
 } from './Dashboard.Widgets'
 
 const severityColorMap: Record<number, string> = {
-  1: 'text-emerald-400',
-  2: 'text-amber-400',
-  3: 'text-red-400',
+  1: 'text-emerald-500 dark:text-emerald-400',
+  2: 'text-amber-500 dark:text-amber-400',
+  3: 'text-red-500 dark:text-red-400',
 }
 
 const statusPill: Record<string, string> = {
-  APPROVED: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
-  PENDING: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
-  REJECTED: 'text-red-400 bg-red-400/10 border-red-400/20',
+  APPROVED:
+    'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+  PENDING:
+    'text-orange-600 dark:text-orange-400 bg-orange-500/10 border-orange-500/20',
+  REJECTED: 'text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/20',
 }
 
 const months = [
@@ -43,7 +46,7 @@ const months = [
 const years = [2022, 2023, 2024, 2025, 2026]
 
 const selectCls =
-  'h-9 px-3 rounded-lg bg-[#181a20] border border-white/[0.08] text-sm text-white/80 focus:outline-none focus:border-orange-500/50 cursor-pointer'
+  'h-9 px-3 rounded-lg bg-surface border border-[var(--border)] text-sm text-foreground/80 focus:outline-none focus:border-orange-500/50 cursor-pointer'
 
 const ShiftPage = () => {
   // «Адмінські» дії дашборду = право керувати всіма змінами
@@ -239,7 +242,19 @@ const ShiftPage = () => {
   ) => {
     e.stopPropagation()
     import('@/service/shift.service').then(({ shiftService }) => {
-      shiftService.updateShift(id, { status }).then(() => fetchShifts())
+      shiftService
+        .updateShift(id, { status })
+        .then(() => {
+          toast.success(
+            status === 'APPROVED' ? 'Зміну підтверджено' : 'Зміну відхилено'
+          )
+          fetchShifts()
+        })
+        .catch((error: any) => {
+          toast.error(
+            error.response?.data?.message || 'Не вдалось оновити статус зміни'
+          )
+        })
     })
   }
   const handleDelete = (e: React.MouseEvent, id: number) => {
@@ -248,17 +263,17 @@ const ShiftPage = () => {
   }
 
   return (
-    <div className='w-full min-h-full rounded-2xl bg-[#0f1013] text-white p-5 sm:p-6 flex flex-col gap-6'>
+    <div className='w-full min-h-full rounded-2xl bg-background text-foreground p-5 sm:p-6 flex flex-col gap-6'>
       {/* Шапка */}
       <div className='flex flex-col lg:flex-row lg:items-center justify-between gap-4'>
         <div>
           <p className='text-orange-500 text-xs font-semibold uppercase tracking-wider'>
             Панель · {months[selectedMonth]} {selectedYear}
           </p>
-          <h1 className='text-2xl sm:text-3xl font-bold text-white mt-1'>
+          <h1 className='text-2xl sm:text-3xl font-bold text-foreground mt-1'>
             Огляд робочих змін
           </h1>
-          <p className='text-white/40 text-sm mt-1'>
+          <p className='text-muted text-sm mt-1'>
             Аналітика годин, змін і статусів за обраний період.
           </p>
         </div>
@@ -284,7 +299,7 @@ const ShiftPage = () => {
           {isAdmin && (
             <button
               onClick={() => setIsReportModalOpen(true)}
-              className='h-9 px-3.5 flex items-center gap-2 rounded-lg border border-white/[0.1] text-white/80 text-sm font-medium hover:bg-white/[0.04] transition'
+              className='h-9 px-3.5 flex items-center gap-2 rounded-lg border border-[var(--border)] text-foreground/80 text-sm font-medium hover:bg-foreground/[0.04] transition'
             >
               <IoMdDocument className='text-base' />
               <span className='hidden sm:inline'>Звіт</span>
@@ -301,7 +316,7 @@ const ShiftPage = () => {
 
       {/* Додаткові фільтри */}
       <div className='flex flex-wrap items-center gap-2'>
-        <span className='text-white/30 text-xs flex items-center gap-1.5 pr-1'>
+        <span className='text-muted/80 text-xs flex items-center gap-1.5 pr-1'>
           <FaFilter size={11} /> Фільтри:
         </span>
         <select
@@ -393,16 +408,16 @@ const ShiftPage = () => {
       )}
 
       {/* Таблиця останніх записів */}
-      <div className='rounded-2xl border border-white/[0.06] bg-[#181a20] overflow-hidden'>
-        <div className='px-5 py-4 border-b border-white/[0.06] flex items-center justify-between'>
-          <h3 className='text-white font-semibold'>Записи змін</h3>
-          <span className='text-white/40 text-xs'>
+      <div className='rounded-2xl border border-[var(--border)] bg-surface overflow-hidden'>
+        <div className='px-5 py-4 border-b border-[var(--border)] flex items-center justify-between'>
+          <h3 className='text-foreground font-semibold'>Записи змін</h3>
+          <span className='text-muted text-xs'>
             {visibleShifts.length} записів · {totalHours.toFixed(1)} год
           </span>
         </div>
 
         <div
-          className={`hidden md:grid ${isAdmin ? 'grid-cols-[90px_1.4fr_1.2fr_1fr_60px_90px_90px]' : 'grid-cols-[90px_1.4fr_1fr_70px_100px]'} gap-3 px-5 py-3 text-[11px] font-semibold text-white/35 uppercase tracking-wider border-b border-white/[0.04]`}
+          className={`hidden md:grid ${isAdmin ? 'grid-cols-[90px_1.4fr_1.2fr_1fr_60px_90px_90px]' : 'grid-cols-[90px_1.4fr_1fr_70px_100px]'} gap-3 px-5 py-3 text-[11px] font-semibold text-muted/80 uppercase tracking-wider border-b border-[var(--border)]`}
         >
           <div>Дата</div>
           {isAdmin && <div>Співробітник</div>}
@@ -413,9 +428,9 @@ const ShiftPage = () => {
           {isAdmin && <div className='text-right'>Дії</div>}
         </div>
 
-        <div className='divide-y divide-white/[0.04] max-h-[52vh] overflow-y-auto custom-scrollbar'>
+        <div className='divide-y divide-[var(--border)] max-h-[52vh] overflow-y-auto custom-scrollbar'>
           {visibleShifts.length === 0 ? (
-            <div className='py-14 flex flex-col items-center justify-center text-white/25'>
+            <div className='py-14 flex flex-col items-center justify-center text-muted/70'>
               <FaFilter className='text-3xl mb-3' />
               <p className='text-sm'>Записів не знайдено</p>
             </div>
@@ -427,31 +442,31 @@ const ShiftPage = () => {
                 className={`md:grid md:items-center ${isAdmin ? 'md:grid-cols-[90px_1.4fr_1.2fr_1fr_60px_90px_90px]' : 'md:grid-cols-[90px_1.4fr_1fr_70px_100px]'} gap-3 px-5 py-4 text-sm cursor-pointer transition-colors ${
                   highlightedIds.includes(item.id)
                     ? 'bg-orange-500/10'
-                    : 'hover:bg-white/[0.03]'
+                    : 'hover:bg-foreground/[0.03]'
                 }`}
               >
-                <div className='text-white/60 font-medium'>
+                <div className='text-muted font-medium'>
                   {format(parseISO(item.date), 'dd MMM', { locale: uk })}
                 </div>
 
                 {isAdmin && (
                   <div className='flex items-center gap-2.5 mt-2 md:mt-0'>
                     <Avatar avatar={item.user?.avatar} size={2} />
-                    <span className='text-white/85 truncate'>
+                    <span className='text-foreground/90 truncate'>
                       {item.user?.firstName} {item.user?.lastName}
                     </span>
                   </div>
                 )}
 
                 <div className='flex flex-col gap-1 mt-2 md:mt-0'>
-                  <span className='text-white/85 font-medium'>
+                  <span className='text-foreground/90 font-medium'>
                     {item.startedAt} – {item.endTime}
                   </span>
                   <div className='flex flex-wrap gap-1.5'>
                     {item.tags?.map((tag) => (
                       <div key={tag.id} className='relative group'>
                         <FaCircle
-                          className={`${severityColorMap[tag.severity] || 'text-white/30'} text-[9px]`}
+                          className={`${severityColorMap[tag.severity] || 'text-muted/60'} text-[9px]`}
                         />
                         <span className='absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 text-[11px] text-white bg-black/90 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none'>
                           {tag.name}
@@ -461,17 +476,17 @@ const ShiftPage = () => {
                   </div>
                 </div>
 
-                <div className='text-white/45 truncate mt-2 md:mt-0'>
+                <div className='text-muted truncate mt-2 md:mt-0'>
                   {item.department?.name || '—'}
                 </div>
 
-                <div className='text-center font-semibold text-white/85 mt-2 md:mt-0'>
+                <div className='text-center font-semibold text-foreground/90 mt-2 md:mt-0'>
                   {item.totalHours?.toFixed(1)}
                 </div>
 
                 <div className='flex md:justify-center mt-2 md:mt-0'>
                   <span
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border ${statusPill[item.status] || 'text-white/50 border-white/10'}`}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border ${statusPill[item.status] || 'text-muted border-[var(--border)]'}`}
                   >
                     {item.status === 'APPROVED'
                       ? 'OK'
@@ -487,13 +502,13 @@ const ShiftPage = () => {
                       <>
                         <button
                           onClick={(e) => handleStatusChange(e, item.id, 'APPROVED')}
-                          className='w-8 h-8 flex items-center justify-center text-emerald-400 bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/20 rounded-lg transition'
+                          className='w-8 h-8 flex items-center justify-center text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg transition'
                         >
                           <FaCheck size={11} />
                         </button>
                         <button
                           onClick={(e) => handleStatusChange(e, item.id, 'REJECTED')}
-                          className='w-8 h-8 flex items-center justify-center text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/20 rounded-lg transition'
+                          className='w-8 h-8 flex items-center justify-center text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition'
                         >
                           <FaTimes size={11} />
                         </button>
@@ -501,7 +516,7 @@ const ShiftPage = () => {
                     ) : (
                       <button
                         onClick={(e) => handleDelete(e, item.id)}
-                        className='w-8 h-8 flex items-center justify-center text-white/30 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition'
+                        className='w-8 h-8 flex items-center justify-center text-muted/70 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition'
                       >
                         <FaTrash size={11} />
                       </button>

@@ -43,4 +43,9 @@ describe('WorkShiftTagController', () => {
     await controller.deleteTag(2);
     expect(service.deleteTag).toHaveBeenCalledWith(2);
   });
+
+  it('getRuleCatalog делегує', () => {
+    service.getRuleCatalog = jest.fn().mockReturnValue({ triggers: [] });
+    expect(controller.getRuleCatalog()).toEqual({ triggers: [] });
+  });
 });

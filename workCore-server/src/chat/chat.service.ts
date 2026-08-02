@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { TelegramService } from '../telegram/telegram.service';
 import { isChannelEnabled } from '../notifications/notification.prefs';
+import { fullName } from '../common/utils/full-name';
 
 const MAX_MESSAGE_LENGTH = 2000;
 const HISTORY_PAGE_SIZE = 50;
@@ -68,9 +69,7 @@ export class ChatService {
       isChannelEnabled(prefs, 'chat', 'telegram')
     ) {
       const sender = (message as any).sender;
-      const senderName = sender
-        ? `${sender.firstName} ${sender.lastName}`
-        : 'Нове повідомлення';
+      const senderName = sender ? fullName(sender) : 'Нове повідомлення';
       await this.telegramService.sendMessage(
         receiver.telegramId,
         `💬 <b>${senderName}</b>\n${trimmed}`,

@@ -33,8 +33,11 @@ export class WorkScheduleController {
 
   @Get()
   @Authorization()
-  getWorkSchedules(@Query() filterDto: FilterWorkScheduleDto) {
-    return this.workScheduleService.getWorkSchedules(filterDto);
+  getWorkSchedules(
+    @Authorized() user: User,
+    @Query() filterDto: FilterWorkScheduleDto,
+  ) {
+    return this.workScheduleService.getWorkSchedules(user, filterDto);
   }
 
   @Get('week-view')

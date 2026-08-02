@@ -1,6 +1,7 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { fullName } from '../utils/full-name';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
@@ -10,6 +11,8 @@ export class LoggerMiddleware implements NestMiddleware {
 
   use(request: Request, response: Response, next: NextFunction): void {
     const { ip, method, originalUrl, session } = request;
+    // SECURITY: не логуємо query-рядок — там бувають токени (запрошення/скидання)
+    const safeUrl = originalUrl.split('?')[0];
     const userAgent = request.get('user-agent') || '';
 
     response.on('finish', async () => {
@@ -26,7 +29,7 @@ export class LoggerMiddleware implements NestMiddleware {
           });
 
           if (user) {
-            userIdentifier = `${user.firstName} ${user.lastName}`;
+            userIdentifier = fullName(user);
           } else {
             userIdentifier = `ID: ${session.userId}`;
           }
@@ -37,7 +40,7 @@ export class LoggerMiddleware implements NestMiddleware {
       }
 
       this.logger.log(
-        `${method} ${originalUrl} ${statusCode} ${contentLength} - ${ip} | User: [${userIdentifier}]`,
+        `${method} ${safeUrl} ${statusCode} ${contentLength} - ${ip} | User: [${userIdentifier}]`,
       );
     });
 

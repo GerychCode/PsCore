@@ -9,10 +9,11 @@ import { Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import { signedCookie } from 'cookie-parser';
+import { parseCorsOrigins } from '../common/utils/cors-origins';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: parseCorsOrigins(process.env.CORS_ORIGIN),
     credentials: true,
   },
 })

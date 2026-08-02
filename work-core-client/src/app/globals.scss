@@ -1,5 +1,8 @@
 @use 'tailwindcss';
 
+/* dark: працює від класу .dark (перемикач теми), а не від системної теми */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #f97316;
   --color-secondary: #717579;
@@ -7,6 +10,7 @@
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
 }
@@ -77,15 +81,32 @@ textarea {
   font-family: inherit;
 }
 
+/* Інпути не успадковують колір тексту за замовчуванням —
+   без цього у темній темі текст лишається чорним */
+input,
+textarea,
+select {
+  color: var(--foreground);
+  caret-color: var(--foreground);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+
 input::-ms-clear {
   display: none;
 }
+/* Автозаповнення: браузер малює власний фон і чорний текст —
+   тримаємо колір тексту темозалежним, фон гасимо нескінченним transition */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
   transition: background-color 9999s ease-in-out 0s;
-  -webkit-text-fill-color: #000 !important;
+  -webkit-text-fill-color: var(--foreground) !important;
+  caret-color: var(--foreground);
 }
 
 button {
@@ -132,7 +153,10 @@ textarea,
 }
 .dark [class~='bg-gray-50'],
 .dark [class~='bg-gray-50/50'],
-.dark [class~='bg-gray-100'] {
+.dark [class~='bg-gray-50/60'],
+.dark [class~='bg-gray-100'],
+.dark [class~='bg-slate-50'],
+.dark [class~='bg-slate-100'] {
   background-color: var(--surface-2) !important;
 }
 .dark [class~='bg-gray-200'],
@@ -169,7 +193,8 @@ textarea,
 .dark [class~='border-gray-300'] {
   border-color: var(--border) !important;
 }
-.dark [class~='divide-gray-100'] > * {
+.dark [class~='divide-gray-100'] > *,
+.dark [class~='divide-gray-200'] > * {
   border-color: var(--border) !important;
 }
 
@@ -180,6 +205,9 @@ textarea,
 }
 .dark [class~='hover:bg-gray-200']:hover {
   background-color: var(--surface-3) !important;
+}
+.dark [class~='hover:bg-white']:hover {
+  background-color: var(--surface) !important;
 }
 
 .dark [class~='bg-blue-50'] {
