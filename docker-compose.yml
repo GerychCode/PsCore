@@ -21,6 +21,11 @@ services:
       # Redis тепер вимагає пароль (див. .env → REDIS_PASSWORD)
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    # Завантаження користувачів (аватарки, вкладення) мусять жити на томі.
+    # Без нього вони лежали в шарі контейнера і зникали при кожному
+    # `docker compose up --build`, тобто при кожному деплої.
+    volumes:
+      - uploads_data:/app/uploads
     command: sh -c "npx prisma db push && npm run start:prod"
     depends_on:
       - postgres
@@ -97,3 +102,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  uploads_data:

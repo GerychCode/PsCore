@@ -10,6 +10,13 @@ export interface IDepartment {
     longitude?: number
     isActive: boolean
     staffingByWeekday?: Record<string, number>
+
+    // Обмеження навантаження для генератора. null = дефолт з коду, 0 = вимкнено.
+    maxHoursPerWeek?: number | null
+    maxConsecutiveDays?: number | null
+    minRestHours?: number | null
+    /** Радіус перевірки місця при відкритті зміни, метри. null/0 = вимкнено. */
+    geofenceRadiusM?: number | null
 }
 
 /** Стан прив'язки Telegram-акаунта відділення. Сам chat id клієнту не віддаємо. */

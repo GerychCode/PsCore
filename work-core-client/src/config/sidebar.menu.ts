@@ -2,7 +2,7 @@ import { IconType } from 'react-icons'
 import { PiUsersThreeBold } from 'react-icons/pi'
 import { LuLayoutDashboard } from 'react-icons/lu'
 import { CgProfile } from 'react-icons/cg'
-import {FaRegCalendarAlt} from "react-icons/fa";
+import {FaRegCalendarAlt, FaRegCalendarCheck} from "react-icons/fa";
 import { HiOutlineOfficeBuilding } from "react-icons/hi";
 import { IoChatbubblesOutline } from "react-icons/io5";
 import { MdOutlineAdminPanelSettings } from "react-icons/md";
@@ -34,6 +34,11 @@ export const sidebarMenuConfig: ISidebarMenu[] = [
     title: 'Графік роботи',
     icon: FaRegCalendarAlt,
     path: '/schedule',
+  },
+  {
+    title: 'Відсутності',
+    icon: FaRegCalendarCheck,
+    path: '/absences',
   },
   {
     title: 'Відділення',
